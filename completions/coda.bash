@@ -39,11 +39,7 @@ _coda_projects() {
 }
 
 _coda_layouts() {
-    local coda_dir="${_CODA_DIR:-}"
-    [ -z "$coda_dir" ] && return
-    for f in "$coda_dir"/layouts/*.sh; do
-        [ -f "$f" ] && basename "${f%.sh}"
-    done
+    _coda_list_layouts 2>/dev/null
 }
 
 _coda_profiles() {
@@ -60,7 +56,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="attach ls switch serve auth project feature profile help"
+    local top_subcommands="attach ls switch serve auth project feature layout profile help"
 
     # Word positions:
     #   words[0] = coda
@@ -101,6 +97,11 @@ _coda_complete() {
                 feature)
                     COMPREPLY=($(compgen -W "start done ls" -- "$cur"))
                     ;;
+                layout)
+                    local layouts
+                    layouts=$(_coda_layouts)
+                    COMPREPLY=($(compgen -W "apply ls show create $layouts" -- "$cur"))
+                    ;;
                 profile)
                     COMPREPLY=($(compgen -W "ls create show" -- "$cur"))
                     ;;
@@ -135,10 +136,18 @@ _coda_complete() {
                             ;;
                     esac
                     ;;
+                layout)
+                    case "${words[2]}" in
+                        apply|show)
+                            local layouts
+                            layouts=$(_coda_layouts)
+                            COMPREPLY=($(compgen -W "$layouts" -- "$cur"))
+                            ;;
+                    esac
+                    ;;
                 feature)
                     case "${words[2]}" in
                         start)
-                            # Suggest existing local branches
                             local branches
                             branches=$(_coda_branches)
                             COMPREPLY=($(compgen -W "$branches" -- "$cur"))

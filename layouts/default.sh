@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# classic.sh — tmux layout: single pane running opencode (original behavior)
+# default.sh — tmux layout: single pane running opencode
 #
 # Called by _coda_attach / coda layout apply with:
 #   $1 = session name
@@ -24,6 +24,3 @@ _layout_spawn() {
     local session="$1" dir="$2"
     tmux new-window -t "$session" -c "$dir" "opencode; exec \$SHELL"
 }
-
-# Legacy alias
-_layout_apply() { _layout_init "$@"; }
