@@ -32,6 +32,8 @@ DEFAULT_TMUX_SESSION="${DEFAULT_TMUX_SESSION:-default}"
 oc() {
     local name="${1:-$(basename "$PWD")}"
     local dir="${2:-$PWD}"
+    # Strip the prefix if the caller already included it (e.g. oc oc-myapp)
+    name="${name#"$SESSION_PREFIX"}"
     local session="${SESSION_PREFIX}${name}"
 
     local count
