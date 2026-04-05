@@ -38,6 +38,18 @@ _coda_projects() {
     done
 }
 
+_coda_layouts() {
+    local coda_dir="${_CODA_DIR:-}"
+    [ -z "$coda_dir" ] && return
+    for f in "$coda_dir"/layouts/*.sh; do
+        [ -f "$f" ] && basename "${f%.sh}"
+    done
+}
+
+_coda_profiles() {
+    _coda_list_profiles 2>/dev/null
+}
+
 _coda_complete() {
     local cur prev words cword
     _init_completion 2>/dev/null || {
@@ -48,7 +60,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="attach ls switch serve auth project feature help"
+    local top_subcommands="attach ls switch serve auth project feature profile help"
 
     # Word positions:
     #   words[0] = coda
@@ -56,9 +68,27 @@ _coda_complete() {
     #   words[2] = sub-subcommand or first arg
     #   words[3] = second arg ...
 
+    if [[ "$cur" == --* ]]; then
+        COMPREPLY=($(compgen -W "--profile --layout" -- "$cur"))
+        return 0
+    fi
+
+    if [[ "$prev" == "--profile" ]]; then
+        local profiles
+        profiles=$(_coda_profiles)
+        COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
+        return 0
+    fi
+
+    if [[ "$prev" == "--layout" ]]; then
+        local layouts
+        layouts=$(_coda_layouts)
+        COMPREPLY=($(compgen -W "$layouts" -- "$cur"))
+        return 0
+    fi
+
     case "$cword" in
         1)
-            # First argument: top-level subcommands or a session name
             local sessions
             sessions=$(_coda_sessions)
             COMPREPLY=($(compgen -W "$top_subcommands $sessions" -- "$cur"))
@@ -70,6 +100,9 @@ _coda_complete() {
                     ;;
                 feature)
                     COMPREPLY=($(compgen -W "start done ls" -- "$cur"))
+                    ;;
+                profile)
+                    COMPREPLY=($(compgen -W "ls create show" -- "$cur"))
                     ;;
                 attach)
                     # Suggest existing sessions to attach to
@@ -93,6 +126,15 @@ _coda_complete() {
             ;;
         3)
             case "${words[1]}" in
+                profile)
+                    case "${words[2]}" in
+                        show)
+                            local profiles
+                            profiles=$(_coda_profiles)
+                            COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
+                            ;;
+                    esac
+                    ;;
                 feature)
                     case "${words[2]}" in
                         start)

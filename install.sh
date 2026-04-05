@@ -365,7 +365,8 @@ fi
 
 mkdir -p "$PROJECTS_DIR"
 mkdir -p "$HOME/.config/opencode"
-ok "Directories: $PROJECTS_DIR, ~/.config/opencode"
+mkdir -p "${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
+ok "Directories: $PROJECTS_DIR, ~/.config/opencode, ~/.config/coda/profiles"
 
 # --- tmux plugins (headless install via TPM batch mode) ---
 

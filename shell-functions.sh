@@ -21,41 +21,67 @@ OPENCODE_PORT_RANGE="${OPENCODE_PORT_RANGE:-10}"
 MAX_CONCURRENT_SESSIONS="${MAX_CONCURRENT_SESSIONS:-5}"
 AUTO_ATTACH_TMUX="${AUTO_ATTACH_TMUX:-true}"
 DEFAULT_TMUX_SESSION="${DEFAULT_TMUX_SESSION:-default}"
+DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-three-pane}"
+DEFAULT_NVIM_APPNAME="${DEFAULT_NVIM_APPNAME:-nvim}"
+CODA_PROFILES_DIR="${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
 
 # ===========================================================================
 # coda — main entry point
 # ===========================================================================
 #
-#   coda [name] [dir]        attach or create a session
-#   coda ls                  list active sessions
-#   coda switch              fzf session picker
-#   coda serve [port]        headless OpenCode server
-#   coda auth                wire Claude Code credentials
-#   coda project <cmd>       manage projects
-#   coda feature <cmd>       manage feature worktrees
-#   coda help                show this help
+#   coda [name] [dir]             attach or create a session
+#   coda ls                       list active sessions
+#   coda switch                   fzf session picker
+#   coda serve [port]             headless OpenCode server
+#   coda auth                     wire Claude Code credentials
+#   coda project <cmd>            manage projects
+#   coda feature <cmd>            manage feature worktrees
+#   coda profile <cmd>            manage layout/config profiles
+#   coda help                     show this help
+#
+# Global flags (any position):
+#   --profile <name>              use a config profile for this session
+#   --layout <name>               override the tmux layout
 #
 coda() {
-    local subcmd="${1:-}"
+    local _coda_profile="" _coda_layout=""
+    local args=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --profile)    _coda_profile="$2"; shift 2 ;;
+            --profile=*)  _coda_profile="${1#--profile=}"; shift ;;
+            --layout)     _coda_layout="$2"; shift 2 ;;
+            --layout=*)   _coda_layout="${1#--layout=}"; shift ;;
+            *)            args+=("$1"); shift ;;
+        esac
+    done
+
+    [ -n "$_coda_profile" ] && CODA_PROFILE="$_coda_profile"
+    [ -n "$_coda_layout" ] && CODA_LAYOUT="$_coda_layout"
+
+    local subcmd="${args[0]:-}"
 
     case "$subcmd" in
         ls)               _coda_ls ;;
         switch)           _coda_switch ;;
-        attach)           shift
-                          if [ -n "${1:-}" ]; then
-                              _coda_attach "${1#"$SESSION_PREFIX"}" "${@:2}"
+        attach)           if [ "${#args[@]}" -gt 1 ]; then
+                              _coda_attach "${args[1]#"$SESSION_PREFIX"}" "${args[@]:2}"
                           else
                               _coda_attach
                           fi
                           ;;
         auth)             _coda_auth ;;
-        serve)            shift; _coda_serve "$@" ;;
-        project)          shift; _coda_project "$@" ;;
-        feature)          shift; _coda_feature "$@" ;;
+        serve)            _coda_serve "${args[@]:1}" ;;
+        project)          _coda_project "${args[@]:1}" ;;
+        feature)          _coda_feature "${args[@]:1}" ;;
+        profile)          _coda_profile_cmd "${args[@]:1}" ;;
         help|--help|-h)   _coda_help ;;
         "")               _coda_attach ;;
-        *)                _coda_attach "${1#"$SESSION_PREFIX"}" "${@:2}" ;;
+        *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}" ;;
     esac
+
+    unset CODA_PROFILE CODA_LAYOUT
 }
 
 # ===========================================================================
@@ -67,6 +93,23 @@ _coda_attach() {
     local dir="${2:-$PWD}"
     local session="${SESSION_PREFIX}${name}"
 
+    local layout="${CODA_LAYOUT:-$DEFAULT_LAYOUT}"
+    local nvim_appname="${CODA_NVIM_APPNAME:-$DEFAULT_NVIM_APPNAME}"
+    local profile="${CODA_PROFILE:-}"
+
+    if [ -n "$profile" ]; then
+        local profile_file
+        profile_file=$(_coda_resolve_profile "$profile")
+        if [ -z "$profile_file" ]; then
+            echo "Unknown profile: $profile"
+            echo "Available: $(_coda_list_profiles | tr '\n' ' ')"
+            return 1
+        fi
+        set -a; source "$profile_file"; set +a
+        layout="${CODA_LAYOUT:-$layout}"
+        nvim_appname="${CODA_NVIM_APPNAME:-$nvim_appname}"
+    fi
+
     if ! tmux has-session -t "$session" 2>/dev/null; then
         local count
         count=$(tmux list-sessions -F '#{session_name}' 2>/dev/null \
@@ -77,7 +120,8 @@ _coda_attach() {
             return 1
         fi
 
-        tmux new-session -d -s "$session" -c "$dir" "opencode; exec \$SHELL"
+        _coda_load_layout "$layout" || return 1
+        _layout_apply "$session" "$dir" "$nvim_appname"
     fi
 
     if [ -n "${TMUX:-}" ]; then
@@ -388,6 +432,97 @@ _coda_feature_ls() {
 }
 
 # ===========================================================================
+# coda profile <ls|create|show>
+# ===========================================================================
+_coda_profile_cmd() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        ls)     _coda_profile_ls ;;
+        create) shift; _coda_profile_create "$@" ;;
+        show)   shift; _coda_profile_show "$@" ;;
+        ""|help) echo "Usage: coda profile <ls|create|show>" ;;
+        *)      echo "Unknown profile subcommand: $subcmd"; return 1 ;;
+    esac
+}
+
+_coda_profile_ls() {
+    echo "Available profiles:"
+    local found=0
+    local name
+
+    for name in $(_coda_list_profiles); do
+        local source="repo"
+        [ -f "$CODA_PROFILES_DIR/${name}.env" ] && source="user"
+        echo "  $name  ($source)"
+        found=1
+    done
+
+    if [ "$found" -eq 0 ]; then
+        echo "  (none)"
+        echo "Create one with: coda profile create <name>"
+    fi
+
+    echo ""
+    echo "Available layouts:"
+    for f in "$_CODA_DIR"/layouts/*.sh; do
+        [ -f "$f" ] || continue
+        echo "  $(basename "${f%.sh}")"
+    done
+
+    echo ""
+    echo "Current defaults: layout=$DEFAULT_LAYOUT  nvim=$DEFAULT_NVIM_APPNAME"
+}
+
+_coda_profile_create() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        echo "Usage: coda profile create <name>"
+        return 1
+    fi
+
+    mkdir -p "$CODA_PROFILES_DIR"
+    local profile_file="$CODA_PROFILES_DIR/${name}.env"
+
+    if [ -f "$profile_file" ]; then
+        echo "Profile already exists: $profile_file"
+        return 1
+    fi
+
+    cat > "$profile_file" <<TMPL
+# Coda profile: $name
+# Used with: coda --profile $name [session]
+
+# tmux layout (see available: coda profile ls)
+CODA_LAYOUT="$DEFAULT_LAYOUT"
+
+# Neovim config directory name (~/.config/<CODA_NVIM_APPNAME>/)
+CODA_NVIM_APPNAME="nvim-${name}"
+TMPL
+
+    echo "Created: $profile_file"
+    echo "Edit to customize, then use: coda --profile $name [session]"
+}
+
+_coda_profile_show() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        echo "Usage: coda profile show <name>"
+        return 1
+    fi
+
+    local profile_file
+    profile_file=$(_coda_resolve_profile "$name")
+    if [ -z "$profile_file" ]; then
+        echo "Unknown profile: $name"
+        return 1
+    fi
+
+    echo "Profile: $name ($profile_file)"
+    echo "---"
+    cat "$profile_file"
+}
+
+# ===========================================================================
 # coda help
 # ===========================================================================
 _coda_help() {
@@ -408,12 +543,22 @@ USAGE
   coda feature done  <branch> [project]          Teardown worktree + session
   coda feature ls                                List worktrees for this project
 
+  coda profile ls                  List profiles and layouts
+  coda profile create <name>       Create a new profile
+  coda profile show <name>         Show profile settings
+
   coda help                   Show this help
+
+GLOBAL FLAGS
+  --profile <name>            Use a config profile (layout + nvim config)
+  --layout <name>             Override the tmux layout for this session
 
 EXAMPLES
   coda project add git@github.com:user/myapp.git
   cd ~/projects/myapp/main
   coda feature start auth
+  coda --profile experimental feature start auth
+  coda --layout classic myapp
   coda ls
   coda switch
   coda feature done auth
@@ -425,6 +570,47 @@ EOF
 # ===========================================================================
 # Internal helpers
 # ===========================================================================
+
+_coda_load_layout() {
+    local name="$1"
+    local layout_file="$_CODA_DIR/layouts/${name}.sh"
+
+    if [ ! -f "$layout_file" ]; then
+        echo "Unknown layout: $name"
+        echo "Available: $(ls "$_CODA_DIR/layouts/"*.sh 2>/dev/null | xargs -I{} basename {} .sh | tr '\n' ' ')"
+        return 1
+    fi
+
+    # shellcheck source=/dev/null
+    source "$layout_file"
+}
+
+_coda_resolve_profile() {
+    local name="${1:-default}"
+    local user_profile="$CODA_PROFILES_DIR/${name}.env"
+    local repo_profile="$_CODA_DIR/profiles/${name}.env"
+
+    if [ -f "$user_profile" ]; then
+        echo "$user_profile"
+    elif [ -f "$repo_profile" ]; then
+        echo "$repo_profile"
+    fi
+}
+
+_coda_list_profiles() {
+    local seen=""
+    local name
+
+    for f in "$CODA_PROFILES_DIR"/*.env "$_CODA_DIR/profiles"/*.env; do
+        [ -f "$f" ] || continue
+        name=$(basename "${f%.env}")
+        case "$seen" in
+            *"|$name|"*) continue ;;
+        esac
+        seen="$seen|$name|"
+        echo "$name"
+    done
+}
 
 _coda_find_project_root() {
     local dir="$PWD"

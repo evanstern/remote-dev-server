@@ -37,11 +37,20 @@ _coda_projects() {
     done
 }
 
+_coda_layouts() {
+    local coda_dir="${_CODA_DIR:-}"
+    for f in "$coda_dir"/layouts/*.sh(N); do
+        echo "${f:t:r}"
+    done
+}
+
 _coda() {
     local state line
     typeset -A opt_args
 
     _arguments -C \
+        '--profile[Config profile to use]:profile:($(_coda_list_profiles 2>/dev/null))' \
+        '--layout[tmux layout override]:layout:($(_coda_layouts))' \
         '1: :->subcommand' \
         '*: :->args' \
         && return 0
@@ -59,6 +68,7 @@ _coda() {
                 'auth:wire Claude Code credentials to OpenCode'
                 'project:manage projects'
                 'feature:manage feature worktrees'
+                'profile:manage layout/config profiles'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -79,6 +89,9 @@ _coda() {
                     ;;
                 feature)
                     _coda_feature_args
+                    ;;
+                profile)
+                    _coda_profile_args
                     ;;
                 serve)
                     local base="${OPENCODE_BASE_PORT:-4096}"
@@ -163,6 +176,34 @@ _coda_feature_args() {
                 start)
                     local projects=($(_coda_projects))
                     _describe 'project name' projects
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_coda_profile_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        '2: :->name' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'ls:list profiles and layouts'
+                'create:create a new profile'
+                'show:show profile settings'
+            )
+            _describe 'profile subcommand' subcmds
+            ;;
+        name)
+            case $line[1] in
+                show)
+                    local profiles=($(_coda_list_profiles 2>/dev/null))
+                    _describe 'profile' profiles
                     ;;
             esac
             ;;
