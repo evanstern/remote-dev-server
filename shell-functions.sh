@@ -41,6 +41,7 @@ coda() {
     case "$subcmd" in
         ls)               _coda_ls ;;
         switch)           _coda_switch ;;
+        attach)           shift; _coda_attach "$@" ;;
         auth)             _coda_auth ;;
         serve)            shift; _coda_serve "$@" ;;
         project)          shift; _coda_project "$@" ;;
