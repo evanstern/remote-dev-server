@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "leader": "ctrl+x",
+    "input_move_left": "ctrl+b",
+    "input_move_right": "ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "messages_page_up": "ctrl+b,pageup",
+    "messages_page_down": "ctrl+f,pagedown",
+    "messages_first": "home",
+    "messages_last": "end",
+    "session_child_cycle": "right",
+    "session_child_cycle_reverse": "left",
+    "session_parent": "up"
+  }
+}
