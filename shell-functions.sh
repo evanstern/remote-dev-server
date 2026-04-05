@@ -21,9 +21,10 @@ OPENCODE_PORT_RANGE="${OPENCODE_PORT_RANGE:-10}"
 MAX_CONCURRENT_SESSIONS="${MAX_CONCURRENT_SESSIONS:-5}"
 AUTO_ATTACH_TMUX="${AUTO_ATTACH_TMUX:-true}"
 DEFAULT_TMUX_SESSION="${DEFAULT_TMUX_SESSION:-default}"
-DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-three-pane}"
+DEFAULT_LAYOUT="${DEFAULT_LAYOUT:-default}"
 DEFAULT_NVIM_APPNAME="${DEFAULT_NVIM_APPNAME:-nvim}"
 CODA_PROFILES_DIR="${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
+CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
 
 # ===========================================================================
 # coda — main entry point
@@ -36,6 +37,7 @@ CODA_PROFILES_DIR="${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
 #   coda auth                     wire Claude Code credentials
 #   coda project <cmd>            manage projects
 #   coda feature <cmd>            manage feature worktrees
+#   coda layout <cmd|name>        manage/apply tmux layouts
 #   coda profile <cmd>            manage layout/config profiles
 #   coda help                     show this help
 #
@@ -75,6 +77,7 @@ coda() {
         serve)            _coda_serve "${args[@]:1}" ;;
         project)          _coda_project "${args[@]:1}" ;;
         feature)          _coda_feature "${args[@]:1}" ;;
+        layout)           _coda_layout_cmd "${args[@]:1}" ;;
         profile)          _coda_profile_cmd "${args[@]:1}" ;;
         help|--help|-h)   _coda_help ;;
         "")               _coda_attach ;;
@@ -121,7 +124,17 @@ _coda_attach() {
         fi
 
         _coda_load_layout "$layout" || return 1
-        _layout_apply "$session" "$dir" "$nvim_appname"
+
+        if declare -f _layout_init &>/dev/null; then
+            _layout_init "$session" "$dir" "$nvim_appname"
+        elif declare -f _layout_apply &>/dev/null; then
+            _layout_apply "$session" "$dir" "$nvim_appname"
+        else
+            echo "Layout '$layout' has no _layout_init or _layout_apply function."
+            return 1
+        fi
+
+        tmux set-environment -t "$session" CODA_DIR "$dir"
     fi
 
     if [ -n "${TMUX:-}" ]; then
@@ -497,14 +510,8 @@ _coda_profile_ls() {
     fi
 
     echo ""
-    echo "Available layouts:"
-    for f in "$_CODA_DIR"/layouts/*.sh; do
-        [ -f "$f" ] || continue
-        echo "  $(basename "${f%.sh}")"
-    done
-
-    echo ""
     echo "Current defaults: layout=$DEFAULT_LAYOUT  nvim=$DEFAULT_NVIM_APPNAME"
+    echo "Run 'coda layout ls' to see available layouts."
 }
 
 _coda_profile_create() {
@@ -557,6 +564,182 @@ _coda_profile_show() {
 }
 
 # ===========================================================================
+# coda layout <apply|ls|show|create|name>
+# ===========================================================================
+_coda_layout_cmd() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        apply)  shift; _coda_layout_apply "$@" ;;
+        ls)     _coda_layout_ls ;;
+        show)   shift; _coda_layout_show "$@" ;;
+        create) shift; _coda_layout_create "$@" ;;
+        ""|help) cat <<'EOF'
+Usage: coda layout <apply|ls|show|create|name>
+
+  coda layout <name>           Apply layout to current session (shorthand)
+  coda layout apply <name>     Apply layout to current session
+  coda layout ls               List available layouts
+  coda layout show <name>      Show layout file contents
+  coda layout create <name>    Create a new layout from template
+EOF
+        ;;
+        *)      _coda_layout_apply "$subcmd" "$@" ;;
+    esac
+}
+
+_coda_layout_apply() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        echo "Usage: coda layout apply <name>"
+        echo "       coda layout <name>"
+        return 1
+    fi
+
+    if [ -z "${TMUX:-}" ]; then
+        echo "Not inside a tmux session. Attach first: coda attach <session>"
+        return 1
+    fi
+
+    local session
+    session=$(tmux display-message -p '#{session_name}')
+
+    local dir
+    dir=$(tmux show-environment -t "$session" CODA_DIR 2>/dev/null | sed 's/^CODA_DIR=//')
+    if [ -z "$dir" ] || [ "${dir:0:1}" = "-" ]; then
+        dir=$(tmux display-message -p '#{pane_current_path}')
+    fi
+
+    local nvim_appname="${CODA_NVIM_APPNAME:-$DEFAULT_NVIM_APPNAME}"
+
+    _coda_load_layout "$name" || return 1
+
+    if declare -f _layout_spawn &>/dev/null; then
+        _layout_spawn "$session" "$dir" "$nvim_appname"
+    else
+        echo "Layout '$name' does not support spawning into existing sessions."
+        echo "Add a _layout_spawn() function to the layout file."
+        return 1
+    fi
+}
+
+_coda_layout_ls() {
+    echo "Available layouts:"
+    local seen="" name source
+    for f in "$CODA_LAYOUTS_DIR"/*.sh "$_CODA_DIR/layouts"/*.sh; do
+        [ -f "$f" ] || continue
+        name=$(basename "${f%.sh}")
+        case "$seen" in *"|$name|"*) continue ;; esac
+        seen="$seen|$name|"
+        if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
+            source="user"
+        else
+            source="builtin"
+        fi
+        echo "  $name  ($source)"
+    done
+    echo ""
+    echo "Default: $DEFAULT_LAYOUT"
+    echo ""
+    echo "Apply to current session:  coda layout <name>"
+    echo "Create a new layout:       coda layout create <name>"
+}
+
+_coda_layout_show() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        echo "Usage: coda layout show <name>"
+        return 1
+    fi
+
+    local layout_file=""
+    if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
+        layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
+    elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
+        layout_file="$_CODA_DIR/layouts/${name}.sh"
+    fi
+
+    if [ -z "$layout_file" ]; then
+        echo "Unknown layout: $name"
+        return 1
+    fi
+
+    echo "Layout: $name ($layout_file)"
+    echo "---"
+    cat "$layout_file"
+}
+
+_coda_layout_create() {
+    local name="${1:-}"
+    if [ -z "$name" ]; then
+        echo "Usage: coda layout create <name>"
+        return 1
+    fi
+
+    mkdir -p "$CODA_LAYOUTS_DIR"
+    local layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
+
+    if [ -f "$layout_file" ]; then
+        echo "Layout already exists: $layout_file"
+        return 1
+    fi
+
+    cat > "$layout_file" <<TMPL
+#!/usr/bin/env bash
+#
+# ${name}.sh — tmux layout
+#
+# \$1 = session name    \$2 = working directory    \$3 = NVIM_APPNAME
+#
+# Layout:
+#   ┌──────────────────────────────────────┐
+#   │         (your layout here)            │
+#   └──────────────────────────────────────┘
+#
+# Tips:
+#   - End commands with "; exec \\\$SHELL" so the pane falls back to a shell
+#   - Use -c "\$dir" on split/new-window to set the starting directory
+#   - Use tmux send-keys for multi-command setup sequences
+#   - Navigate panes with: select-pane -t "\$session" -L/-R/-U/-D
+#   - See 'man tmux' for split-window, new-window, select-pane options
+
+_layout_init() {
+    local session="\$1" dir="\$2" nvim_appname="\${3:-nvim}"
+    local cols="\${COLUMNS:-200}" rows="\${LINES:-50}"
+
+    tmux new-session -d -s "\$session" -x "\$cols" -y "\$rows" -c "\$dir" "opencode; exec \\\$SHELL"
+
+    # Add panes — use -l (absolute) not -p (percentage); -p is broken on tmux 3.4:
+    # local half=\$(( cols / 2 ))
+    # tmux split-window -h -t "\$session" -c "\$dir" -l "\$half" \\
+    #     "NVIM_APPNAME=\$nvim_appname nvim .; exec \\\$SHELL"
+    # tmux select-pane -t "\$session" -L
+}
+
+_layout_spawn() {
+    local session="\$1" dir="\$2" nvim_appname="\${3:-nvim}"
+
+    local script
+    script=\$(mktemp "\${TMPDIR:-/tmp}/coda-layout.XXXXXX")
+    cat > "\$script" <<SPAWN
+#!/usr/bin/env bash
+rm -f "\\\$0"
+# Add splits here — use -l (absolute) not -p (percentage):
+# pw=\\\$(tmux display-message -p '#{pane_width}')
+# tmux split-window -h -c "\$dir" -l \\\$(( pw / 2 )) \\
+#     "NVIM_APPNAME=\$nvim_appname nvim .; exec \\\\\\\$SHELL"
+# tmux select-pane -t "\\\$TMUX_PANE"
+opencode; exec "\\\$SHELL"
+SPAWN
+    chmod +x "\$script"
+    tmux new-window -t "\$session" -c "\$dir" "\$script"
+}
+TMPL
+
+    echo "Created: $layout_file"
+    echo "Edit it, then apply: coda layout $name"
+}
+
+# ===========================================================================
 # coda help
 # ===========================================================================
 _coda_help() {
@@ -578,7 +761,12 @@ USAGE
   coda feature done  <branch> [project]          Teardown worktree + session
   coda feature ls                                List worktrees for this project
 
-  coda profile ls                  List profiles and layouts
+  coda layout <name>                Apply a layout to the current session
+  coda layout ls                   List available layouts
+  coda layout show <name>          Show layout file contents
+  coda layout create <name>        Create a new layout from template
+
+  coda profile ls                  List profiles
   coda profile create <name>       Create a new profile
   coda profile show <name>         Show profile settings
 
@@ -606,15 +794,34 @@ EOF
 # Internal helpers
 # ===========================================================================
 
+_coda_list_layouts() {
+    local seen="" name
+    for f in "$CODA_LAYOUTS_DIR"/*.sh "$_CODA_DIR/layouts"/*.sh; do
+        [ -f "$f" ] || continue
+        name=$(basename "${f%.sh}")
+        case "$seen" in *"|$name|"*) continue ;; esac
+        seen="$seen|$name|"
+        echo "$name"
+    done
+}
+
 _coda_load_layout() {
     local name="$1"
-    local layout_file="$_CODA_DIR/layouts/${name}.sh"
+    local layout_file=""
 
-    if [ ! -f "$layout_file" ]; then
+    if [ -f "$CODA_LAYOUTS_DIR/${name}.sh" ]; then
+        layout_file="$CODA_LAYOUTS_DIR/${name}.sh"
+    elif [ -f "$_CODA_DIR/layouts/${name}.sh" ]; then
+        layout_file="$_CODA_DIR/layouts/${name}.sh"
+    fi
+
+    if [ -z "$layout_file" ]; then
         echo "Unknown layout: $name"
-        echo "Available: $(ls "$_CODA_DIR/layouts/"*.sh 2>/dev/null | xargs -I{} basename {} .sh | tr '\n' ' ')"
+        echo "Available: $(_coda_list_layouts | tr '\n' ' ')"
         return 1
     fi
+
+    unset -f _layout_init _layout_spawn _layout_apply 2>/dev/null
 
     # shellcheck source=/dev/null
     source "$layout_file"

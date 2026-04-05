@@ -45,10 +45,7 @@ _coda_project_branches() {
 }
 
 _coda_layouts() {
-    local coda_dir="${_CODA_DIR:-}"
-    for f in "$coda_dir"/layouts/*.sh(N); do
-        echo "${f:t:r}"
-    done
+    _coda_list_layouts 2>/dev/null
 }
 
 _coda() {
@@ -75,7 +72,8 @@ _coda() {
                 'auth:wire Claude Code credentials to OpenCode'
                 'project:manage projects'
                 'feature:manage feature worktrees'
-                'profile:manage layout/config profiles'
+                'layout:manage and apply tmux layouts'
+                'profile:manage config profiles'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -96,6 +94,9 @@ _coda() {
                     ;;
                 feature)
                     _coda_feature_args
+                    ;;
+                layout)
+                    _coda_layout_args
                     ;;
                 profile)
                     _coda_profile_args
@@ -197,6 +198,36 @@ _coda_feature_args() {
                 start)
                     local projects=($(_coda_projects))
                     _describe 'project name' projects
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_coda_layout_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        '2: :->name' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds layouts
+            subcmds=(
+                'apply:apply a layout to the current session'
+                'ls:list available layouts'
+                'show:show layout file contents'
+                'create:create a new layout from template'
+            )
+            layouts=($(_coda_layouts))
+            _describe 'layout subcommand or name' subcmds -- layouts
+            ;;
+        name)
+            case $line[1] in
+                apply|show)
+                    local layouts=($(_coda_layouts))
+                    _describe 'layout' layouts
                     ;;
             esac
             ;;

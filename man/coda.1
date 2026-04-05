@@ -47,6 +47,29 @@ coda \- OpenCode session and project manager
 .B ls
 .br
 .B coda
+.B layout
+.RI [ name ]
+.br
+.B coda
+.B layout
+.B apply
+.I name
+.br
+.B coda
+.B layout
+.B ls
+.br
+.B coda
+.B layout
+.B show
+.I name
+.br
+.B coda
+.B layout
+.B create
+.I name
+.br
+.B coda
 .B help
 .
 .SH DESCRIPTION
@@ -218,6 +241,98 @@ Run
 .B git worktree list
 for the project root detected from the current directory.
 .
+.SS Tmux layouts
+.
+.TP
+.B coda layout \fR[\fIname\fR]
+Apply a tmux layout to the current session.
+Creates new window(s) with the pane arrangement defined by the layout, all
+starting in the session's base directory (the worktree root for feature
+branches).
+Equivalent to
+.BR "coda layout apply" .
+.sp
+Must be run from inside a tmux session.
+If the session was created by
+.BR coda ,
+the working directory is read from the
+.B CODA_DIR
+tmux environment variable; otherwise falls back to the current pane's path.
+.
+.TP
+.B coda layout apply \fIname\fR
+Explicit form of
+.BR "coda layout" .
+.
+.TP
+.B coda layout ls
+List all available layouts from both the built-in
+.I layouts/
+directory and the user directory
+.RB ( CODA_LAYOUTS_DIR ).
+Shows the current default layout.
+.
+.TP
+.B coda layout show \fIname\fR
+Print the layout file contents, including the pane diagram and tmux commands.
+.
+.TP
+.B coda layout create \fIname\fR
+Create a new layout from a commented template in
+.BR CODA_LAYOUTS_DIR .
+The template includes example
+.B tmux split-window
+and
+.B tmux send-keys
+patterns for building custom pane arrangements.
+.sp
+Built-in layouts:
+.RS
+.TP
+.B default
+Single pane running
+.BR opencode .
+.TP
+.B wide-twopane
+Two side-by-side panes:
+.B opencode
+(left) and
+.B nvim
+(right).
+.TP
+.B classic
+Single pane running
+.BR opencode
+(alias for the original behaviour).
+.TP
+.B three-pane
+.B opencode
+(top-left),
+.B nvim
+(top-right), shell (bottom).
+.RE
+.
+.SS Profiles
+.
+.TP
+.B coda profile ls
+List available profiles.
+.
+.TP
+.B coda profile create \fIname\fR
+Create a new profile in
+.BR CODA_PROFILES_DIR .
+Profiles are
+.I .env
+files that can override
+.B CODA_LAYOUT
+and
+.BR CODA_NVIM_APPNAME .
+.
+.TP
+.B coda profile show \fIname\fR
+Print the contents of a profile.
+.
 .SS Help
 .
 .TP
@@ -246,6 +361,9 @@ DEFAULT_BRANCH	main	Branch for new worktrees
 GIT_REMOTE	origin	Git remote name
 OPENCODE_BASE_PORT	4096	First port for \fBcoda serve\fR
 OPENCODE_PORT_RANGE	10	Ports to scan
+DEFAULT_LAYOUT	default	Default tmux layout
+CODA_LAYOUTS_DIR	~/.config/coda/layouts	User layout directory
+CODA_PROFILES_DIR	~/.config/coda/profiles	User profile directory
 MAX_CONCURRENT_SESSIONS	5	Max parallel sessions
 OPENCODE_HEADLESS_PERMISSION	{"*":"allow"}	Permission policy for serve
 AUTO_ATTACH_TMUX	true	Auto-attach on SSH login
@@ -277,6 +395,14 @@ coda feature start auth
 coda ls
 coda switch
 coda feature done auth
+.EE
+.
+.SS Apply a layout to a running session
+.EX
+coda attach myapp--auth
+coda layout wide-twopane
+coda layout ls
+coda layout create my-custom
 .EE
 .
 .SS Running multiple agents in parallel
@@ -311,6 +437,15 @@ Local configuration (git-ignored).
 .TP
 .I ~/coda/.env.example
 Configuration template.
+.TP
+.I ~/coda/layouts/
+Built-in tmux layout scripts.
+.TP
+.I ~/.config/coda/layouts/
+User-created tmux layout scripts (override built-ins of the same name).
+.TP
+.I ~/.config/coda/profiles/
+User-created profile files.
 .TP
 .I ~/coda/completions/coda.bash
 Bash tab-completion script.
