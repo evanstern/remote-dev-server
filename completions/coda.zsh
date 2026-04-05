@@ -52,6 +52,7 @@ _coda() {
             sessions=($(_coda_sessions))
             local -a all_completions
             all_completions=(
+                'attach:attach to an existing session'
                 'ls:list active sessions'
                 'switch:fzf session picker with preview'
                 'serve:start OpenCode in headless server mode'
@@ -69,6 +70,10 @@ _coda() {
 
         args)
             case $line[1] in
+                attach)
+                    local sessions=($(_coda_sessions))
+                    _describe 'session' sessions
+                    ;;
                 project)
                     _coda_project_args
                     ;;

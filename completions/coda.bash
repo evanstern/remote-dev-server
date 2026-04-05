@@ -48,7 +48,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="ls switch serve auth project feature help"
+    local top_subcommands="attach ls switch serve auth project feature help"
 
     # Word positions:
     #   words[0] = coda
@@ -70,6 +70,12 @@ _coda_complete() {
                     ;;
                 feature)
                     COMPREPLY=($(compgen -W "start done ls" -- "$cur"))
+                    ;;
+                attach)
+                    # Suggest existing sessions to attach to
+                    local sessions
+                    sessions=$(_coda_sessions)
+                    COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
                     ;;
                 serve)
                     # Port numbers in the configured range
