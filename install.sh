@@ -22,6 +22,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Resolve a stable path for lines written to shell RC files.
+# In a bare-repo + worktree layout, SCRIPT_DIR may point to an ephemeral
+# feature worktree that gets deleted by "coda feature done".  We detect this
+# and pin to the permanent "main" worktree instead.
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+if [ -d "$PROJECT_ROOT/.bare" ] && [ -d "$PROJECT_ROOT/main" ]; then
+    STABLE_DIR="$PROJECT_ROOT/main"
+else
+    STABLE_DIR="$SCRIPT_DIR"
+fi
+
 # ---------------------------------------------------------------------------
 # Load config — create .env from template if it doesn't exist yet
 # ---------------------------------------------------------------------------
@@ -336,11 +347,18 @@ elif [ -f "$HOME/.zshrc" ]; then
     SHELL_RC="$HOME/.zshrc"
 fi
 
-SOURCE_LINE="source $SCRIPT_DIR/shell-functions.sh"
+SOURCE_LINE="source $STABLE_DIR/shell-functions.sh"
 
 if [ -n "$SHELL_RC" ]; then
-    if grep -qF "$SOURCE_LINE" "$SHELL_RC" 2>/dev/null; then
-        ok "Shell functions — already sourced in $SHELL_RC"
+    if grep -qF "shell-functions.sh" "$SHELL_RC" 2>/dev/null; then
+        EXISTING="$(grep -F "shell-functions.sh" "$SHELL_RC" | tail -1)"
+        if [ "$EXISTING" = "$SOURCE_LINE" ]; then
+            ok "Shell functions — already sourced in $SHELL_RC"
+        else
+            sed -i "\|source .*/shell-functions\.sh|d" "$SHELL_RC"
+            printf '\n# coda — OpenCode session manager\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
+            ok "Shell functions updated in $SHELL_RC (was: $EXISTING)"
+        fi
     else
         printf '\n# coda — OpenCode session manager\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
         ok "Shell functions added to $SHELL_RC"
@@ -353,9 +371,16 @@ fi
 # --- Tab completion ---
 
 if [ -f "$HOME/.bashrc" ]; then
-    COMPLETION_LINE="source $SCRIPT_DIR/completions/coda.bash"
-    if grep -qF "$COMPLETION_LINE" "$HOME/.bashrc" 2>/dev/null; then
-        ok "Bash completion — already installed"
+    COMPLETION_LINE="source $STABLE_DIR/completions/coda.bash"
+    if grep -qF "completions/coda.bash" "$HOME/.bashrc" 2>/dev/null; then
+        EXISTING="$(grep -F "completions/coda.bash" "$HOME/.bashrc" | tail -1)"
+        if [ "$EXISTING" = "$COMPLETION_LINE" ]; then
+            ok "Bash completion — already installed"
+        else
+            sed -i "\|source .*/completions/coda\.bash|d" "$HOME/.bashrc"
+            printf '\n# coda tab completion\n%s\n' "$COMPLETION_LINE" >> "$HOME/.bashrc"
+            ok "Bash completion updated in ~/.bashrc"
+        fi
     else
         printf '\n# coda tab completion\n%s\n' "$COMPLETION_LINE" >> "$HOME/.bashrc"
         ok "Bash completion added to ~/.bashrc"
@@ -363,8 +388,7 @@ if [ -f "$HOME/.bashrc" ]; then
 fi
 
 if [ -f "$HOME/.zshrc" ]; then
-    # For zsh, add completions dir to fpath before compinit
-    FPATH_LINE="fpath=($SCRIPT_DIR/completions \$fpath)"
+    FPATH_LINE="fpath=($STABLE_DIR/completions \$fpath)"
     COMPINIT_LINE="autoload -Uz compinit && compinit"
     if grep -qF "completions/coda" "$HOME/.zshrc" 2>/dev/null; then
         ok "Zsh completion — already installed"
