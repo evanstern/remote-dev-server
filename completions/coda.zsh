@@ -165,6 +165,7 @@ _coda_feature_args() {
             subcmds=(
                 'start:create a worktree and session for a branch'
                 'done:teardown a worktree and its session'
+                'finish:agent-safe teardown (run from within the session)'
                 'ls:list worktrees for the current project'
             )
             _describe 'feature subcommand' subcmds

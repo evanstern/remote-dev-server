@@ -373,11 +373,12 @@ _coda_project_ls() {
 _coda_feature() {
     local subcmd="${1:-}"
     case "$subcmd" in
-        start) shift; _coda_feature_start "$@" ;;
-        done)  shift; _coda_feature_done "$@" ;;
-        ls)    _coda_feature_ls ;;
-        ""|help) echo "Usage: coda feature <start|done|ls>" ;;
-        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|ls>"; return 1 ;;
+        start)  shift; _coda_feature_start "$@" ;;
+        done)   shift; _coda_feature_done "$@" ;;
+        finish) _coda_feature_finish ;;
+        ls)     _coda_feature_ls ;;
+        ""|help) echo "Usage: coda feature <start|done|finish|ls>" ;;
+        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|finish|ls>"; return 1 ;;
     esac
 }
 
@@ -461,6 +462,51 @@ _coda_feature_done() {
     fi
 
     echo "Done."
+}
+
+# coda feature finish
+# Agent-safe variant of 'feature done'. Auto-detects the current branch and
+# backgrounds the teardown so it can be called from within the doomed session.
+_coda_feature_finish() {
+    local branch
+    branch=$(git branch --show-current 2>/dev/null)
+    if [ -z "$branch" ]; then
+        echo "Not on a git branch."
+        return 1
+    fi
+
+    if [ "$branch" = "$DEFAULT_BRANCH" ]; then
+        echo "Cannot finish the default branch ($DEFAULT_BRANCH)."
+        return 1
+    fi
+
+    local project_root
+    project_root=$(_coda_find_project_root)
+    if [ -z "$project_root" ]; then
+        echo "Not inside a coda project directory."
+        return 1
+    fi
+
+    local project_name
+    project_name=$(basename "$project_root")
+
+    local session="${SESSION_PREFIX}${project_name}--${branch}"
+    local worktree_dir="$project_root/$branch"
+
+    echo "Finishing feature: $branch"
+    echo "  Scheduling cleanup (session, worktree, branch)..."
+
+    # Background the cleanup so it survives the session kill.
+    # nohup ensures the process ignores SIGHUP when tmux tears down.
+    nohup bash -c "
+        sleep 2
+        tmux kill-session -t '$session' 2>/dev/null
+        git -C '$project_root' worktree remove '$worktree_dir' --force 2>/dev/null
+        git -C '$project_root' branch -D '$branch' 2>/dev/null
+    " >/dev/null 2>&1 &
+    disown
+
+    echo "  Cleanup scheduled. This session will close in a few seconds."
 }
 
 # coda feature ls
@@ -759,6 +805,7 @@ USAGE
 
   coda feature start <branch> [base] [project]   New worktree + session
   coda feature done  <branch> [project]          Teardown worktree + session
+  coda feature finish                            Agent-safe teardown (from within session)
   coda feature ls                                List worktrees for this project
 
   coda layout <name>                Apply a layout to the current session

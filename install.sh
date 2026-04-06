@@ -315,6 +315,18 @@ else
     ok "~/.config/opencode/tui.json installed"
 fi
 
+# --- OpenCode agent instructions ---
+
+if [ -f "$HOME/.config/opencode/AGENTS.md" ] && diff -q "$SCRIPT_DIR/AGENTS.md" "$HOME/.config/opencode/AGENTS.md" &>/dev/null; then
+    ok "~/.config/opencode/AGENTS.md — up to date"
+else
+    if [ -f "$HOME/.config/opencode/AGENTS.md" ]; then
+        cp "$HOME/.config/opencode/AGENTS.md" "$HOME/.config/opencode/AGENTS.md.backup.$(date +%Y%m%d%H%M%S)"
+    fi
+    cp "$SCRIPT_DIR/AGENTS.md" "$HOME/.config/opencode/AGENTS.md"
+    ok "~/.config/opencode/AGENTS.md installed"
+fi
+
 # --- Shell functions and completions ---
 
 # Prefer .bashrc on Ubuntu (default shell); fall back to .zshrc

@@ -44,6 +44,10 @@ coda \- OpenCode session and project manager
 .br
 .B coda
 .B feature
+.B finish
+.br
+.B coda
+.B feature
 .B ls
 .br
 .B coda
@@ -234,6 +238,21 @@ Delete the local branch.
 .B Warning:
 the branch is deleted regardless of merge status.
 Merge or push your changes before running this command.
+.
+.TP
+.B coda feature finish
+Agent-safe variant of
+.BR "coda feature done" .
+Auto-detects the current branch from the working directory and backgrounds the
+teardown (session kill, worktree removal, branch deletion) so it can safely be
+called from within the session being destroyed.
+Takes no arguments.
+.sp
+Designed for OpenCode agents that need to clean up their own session as their
+final action.
+The calling process returns immediately; the actual cleanup runs after a short
+delay via
+.BR nohup (1).
 .
 .TP
 .B coda feature ls
@@ -460,6 +479,13 @@ tmux configuration (installed by
 .I ~/.config/opencode/tui.json
 OpenCode TUI keybind configuration (installed by
 .BR install.sh ).
+.TP
+.I ~/.config/opencode/AGENTS.md
+Global agent instructions loaded by OpenCode on startup (installed by
+.BR install.sh ).
+Teaches agents about the coda feature lifecycle and the
+.B "coda feature finish"
+cleanup command.
 .TP
 .I ~/.claude/.credentials.json
 Claude Code OAuth credentials (written by

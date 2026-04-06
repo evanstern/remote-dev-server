@@ -148,10 +148,18 @@ tmux                       # start your first session
   │                    │                                              │
   │                    └──▶  OpenCode running in auth/               │
   │                                   │                              │
-  │                           [work happens; PR merged]              │
+  │                           [work happens]                         │
   │                                   │                              │
-  │  coda feature done auth           │                              │
-  │       │                           │                              │
+  │  Cleanup (choose one):            │                              │
+  │                                   │                              │
+  │  A) Agent self-cleanup:           │                              │
+  │     User: "ship it"              │                              │
+  │     Agent: commit → push → PR    │                              │
+  │            → coda feature finish  │                              │
+  │                                   │                              │
+  │  B) Manual from another session:  │                              │
+  │     coda feature done auth        │                              │
+  │                                   │                              │
   │       ├──▶  kill session: coda-myapp--auth                      │
   │       ├──▶  git worktree remove  auth/                           │
   │       └──▶  git branch -D auth                                   │
@@ -288,7 +296,8 @@ If the worktree already exists, attaches to the existing session.
 
 ### `coda feature done <branch> [project]`
 
-Tear down a feature completely.
+Tear down a feature completely. Run this from a **different** session (e.g. the
+main branch).
 
 ```bash
 cd ~/projects/myapp/main
@@ -299,6 +308,30 @@ coda feature done auth
 ```
 
 > **Note:** Deletes the branch regardless of merge status. Merge or push first.
+
+---
+
+### `coda feature finish`
+
+Agent-safe variant of `coda feature done`. Auto-detects the current branch and
+backgrounds the teardown so it can safely be called **from within the session
+being destroyed** (e.g. by an OpenCode agent as its final action).
+
+```bash
+# Inside the feature session (e.g. coda-myapp--auth):
+coda feature finish
+# Finishing feature: auth
+#   Scheduling cleanup (session, worktree, branch)...
+#   Cleanup scheduled. This session will close in a few seconds.
+```
+
+Takes no arguments — branch, project, and session are all detected from the
+working directory.
+
+OpenCode agents learn about this command via the global `AGENTS.md` installed to
+`~/.config/opencode/AGENTS.md`. When a user says "commit this, merge, and we're
+done" (or similar), the agent will commit, push, create a PR, then run
+`coda feature finish` to clean up.
 
 ---
 
@@ -469,6 +502,7 @@ every 15 minutes and restores them on reboot.
 coda/
 |-- install.sh              Full install: packages → config wiring
 |-- shell-functions.sh      The coda command (sourced into your shell)
+|-- AGENTS.md               OpenCode agent instructions (installed to ~/.config/opencode/)
 |-- completions/
 |   |-- coda.bash           Bash tab completion
 |   \-- coda.zsh            Zsh tab completion
