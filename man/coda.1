@@ -70,6 +70,10 @@ coda \- OpenCode session and project manager
 .I name
 .br
 .B coda
+.B watch
+.RB [ start | stop | status ]
+.br
+.B coda
 .B help
 .
 .SH DESCRIPTION
@@ -312,6 +316,39 @@ Single pane running
 (top-right), shell (bottom).
 .RE
 .
+.SS Session watcher
+.
+.TP
+.B coda watch
+.TQ
+.B coda watch start
+Start the background session watcher.
+Polls all active
+.B coda
+sessions every
+.B CODA_WATCH_INTERVAL
+seconds (default: 5).
+When an OpenCode instance finishes processing and begins waiting for input, the
+watcher sends a terminal bell (BEL) to every attached tmux client and displays a
+status-bar message identifying the session.
+.sp
+The bell propagates through mosh to your local terminal, which triggers an
+OS-native notification (supported by Ghostty, iTerm2, Kitty, and most modern
+terminal emulators).
+.sp
+The watcher runs in its own tmux session named
+.BR coda-watcher .
+.
+.TP
+.B coda watch stop
+Stop the watcher by killing the
+.B coda-watcher
+tmux session.
+.
+.TP
+.B coda watch status
+Print whether the watcher is running and when it was started.
+.
 .SS Profiles
 .
 .TP
@@ -365,6 +402,8 @@ DEFAULT_LAYOUT	default	Default tmux layout
 CODA_LAYOUTS_DIR	~/.config/coda/layouts	User layout directory
 CODA_PROFILES_DIR	~/.config/coda/profiles	User profile directory
 MAX_CONCURRENT_SESSIONS	5	Max parallel sessions
+CODA_WATCH_INTERVAL	5	Watcher poll interval (seconds)
+CODA_WATCH_COOLDOWN	60	Min seconds between repeat notifications
 OPENCODE_HEADLESS_PERMISSION	{"*":"allow"}	Permission policy for serve
 AUTO_ATTACH_TMUX	true	Auto-attach on SSH login
 DEFAULT_TMUX_SESSION	default	Session name for auto-attach
@@ -418,6 +457,13 @@ coda switch          # pick one to check on
 .EX
 coda serve           # starts on first free port
 opencode attach http://localhost:4096
+.EE
+.
+.SS Monitoring sessions for attention
+.EX
+coda watch               # start the watcher
+coda watch status        # check if running
+coda watch stop          # stop when done
 .EE
 .
 .SS Sending tasks from the command line (no attach needed)

@@ -39,6 +39,7 @@ CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
 #   coda feature <cmd>            manage feature worktrees
 #   coda layout <cmd|name>        manage/apply tmux layouts
 #   coda profile <cmd>            manage layout/config profiles
+#   coda watch <cmd>              monitor sessions for attention signals
 #   coda help                     show this help
 #
 # Global flags (any position):
@@ -79,6 +80,7 @@ coda() {
         feature)          _coda_feature "${args[@]:1}" ;;
         layout)           _coda_layout_cmd "${args[@]:1}" ;;
         profile)          _coda_profile_cmd "${args[@]:1}" ;;
+        watch)            _coda_watch "${args[@]:1}" ;;
         help|--help|-h)   _coda_help ;;
         "")               _coda_attach ;;
         *)                _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}" ;;
@@ -740,6 +742,65 @@ TMPL
 }
 
 # ===========================================================================
+# coda watch <start|stop|status>
+# ===========================================================================
+_coda_watch() {
+    local subcmd="${1:-start}"
+    local watcher_session="coda-watcher"
+
+    case "$subcmd" in
+        start)  _coda_watch_start "$watcher_session" ;;
+        stop)   _coda_watch_stop "$watcher_session" ;;
+        status) _coda_watch_status "$watcher_session" ;;
+        ""|help) echo "Usage: coda watch <start|stop|status>" ;;
+        *)    echo "Unknown watch subcommand: $subcmd"; echo "Usage: coda watch <start|stop|status>"; return 1 ;;
+    esac
+}
+
+_coda_watch_start() {
+    local watcher_session="$1"
+
+    if tmux has-session -t "$watcher_session" 2>/dev/null; then
+        echo "Watcher already running."
+        echo "  View:  tmux attach -t $watcher_session"
+        echo "  Stop:  coda watch stop"
+        return 0
+    fi
+
+    tmux new-session -d -s "$watcher_session" "$_CODA_DIR/coda-watcher.sh"
+    echo "Watcher started."
+    echo "  View:  tmux attach -t $watcher_session"
+    echo "  Stop:  coda watch stop"
+}
+
+_coda_watch_stop() {
+    local watcher_session="$1"
+
+    if ! tmux has-session -t "$watcher_session" 2>/dev/null; then
+        echo "Watcher is not running."
+        return 0
+    fi
+
+    tmux kill-session -t "$watcher_session"
+    echo "Watcher stopped."
+}
+
+_coda_watch_status() {
+    local watcher_session="$1"
+
+    if tmux has-session -t "$watcher_session" 2>/dev/null; then
+        local created
+        created=$(tmux display-message -t "$watcher_session" -p '#{t:session_created}' 2>/dev/null)
+        echo "Watcher: running (since $created)"
+        echo "  View:  tmux attach -t $watcher_session"
+        echo "  Stop:  coda watch stop"
+    else
+        echo "Watcher: stopped"
+        echo "  Start: coda watch"
+    fi
+}
+
+# ===========================================================================
 # coda help
 # ===========================================================================
 _coda_help() {
@@ -769,6 +830,10 @@ USAGE
   coda profile ls                  List profiles
   coda profile create <name>       Create a new profile
   coda profile show <name>         Show profile settings
+
+  coda watch                       Start monitoring sessions (bell on idle)
+  coda watch stop                  Stop the watcher
+  coda watch status                Check if watcher is running
 
   coda help                   Show this help
 
