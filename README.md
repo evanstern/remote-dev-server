@@ -354,6 +354,29 @@ If Claude auth expires, re-run `claude auth login` then `coda auth`.
 
 ---
 
+### `coda watch`
+
+Start a background watcher that monitors all OpenCode sessions. When an agent
+finishes processing and starts waiting for your input, the watcher sends a
+terminal bell to every connected tmux client. The bell propagates through mosh
+to your local terminal, which shows an OS-native notification.
+
+```bash
+coda watch                # start the watcher (runs in coda-watcher tmux session)
+coda watch status         # check if running
+coda watch stop           # stop the watcher
+```
+
+Detection: the watcher captures each pane's status bar every `CODA_WATCH_INTERVAL`
+seconds (default: 5). It looks for the `esc interrupt` indicator that appears
+while OpenCode is actively processing. When that indicator disappears (processing
+→ idle transition), the notification fires.
+
+A cooldown of `CODA_WATCH_COOLDOWN` seconds (default: 60) prevents repeated
+notifications for the same pane.
+
+---
+
 ### `coda help`
 
 Print a short usage summary. Full manual: `man coda`.
@@ -428,6 +451,8 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `MAX_CONCURRENT_SESSIONS` | `5` | Cap on parallel sessions |
 | `OPENCODE_HEADLESS_PERMISSION` | `{"*":"allow"}` | Permission policy for `coda serve` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
+| `CODA_WATCH_INTERVAL` | `5` | Watcher poll interval (seconds) |
+| `CODA_WATCH_COOLDOWN` | `60` | Min seconds between repeat notifications per pane |
 | `AUTO_ATTACH_TMUX` | `true` | Auto-attach to tmux on SSH login |
 | `DEFAULT_TMUX_SESSION` | `default` | Session name for auto-attach |
 
@@ -468,6 +493,7 @@ every 15 minutes and restores them on reboot.
 ```
 coda/
 |-- install.sh              Full install: packages → config wiring
+|-- coda-watcher.sh         Background session monitor (started via coda watch)
 |-- shell-functions.sh      The coda command (sourced into your shell)
 |-- completions/
 |   |-- coda.bash           Bash tab completion

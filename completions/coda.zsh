@@ -74,6 +74,7 @@ _coda() {
                 'feature:manage feature worktrees'
                 'layout:manage and apply tmux layouts'
                 'profile:manage config profiles'
+                'watch:monitor sessions for attention signals'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -100,6 +101,9 @@ _coda() {
                     ;;
                 profile)
                     _coda_profile_args
+                    ;;
+                watch)
+                    _coda_watch_args
                     ;;
                 serve)
                     local base="${OPENCODE_BASE_PORT:-4096}"
@@ -258,6 +262,25 @@ _coda_profile_args() {
                     _describe 'profile' profiles
                     ;;
             esac
+            ;;
+    esac
+}
+
+_coda_watch_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'start:start the watcher'
+                'stop:stop the watcher'
+                'status:check if watcher is running'
+            )
+            _describe 'watch subcommand' subcmds
             ;;
     esac
 }
