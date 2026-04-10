@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+first_line=""
+if IFS= read -r first_line; then
+    printf '%s\n' "$first_line"
+fi
