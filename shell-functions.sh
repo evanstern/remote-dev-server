@@ -16,7 +16,7 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 SESSION_PREFIX="${SESSION_PREFIX:-coda-}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
-GIT_ORG="${GIT_ORG:-evanstern}"
+NEW_PROJECT_GITHUB_OWNER="evanstern"
 
 _coda_sanitize_session_name() {
     printf '%s' "$1" | tr '.' '-'
@@ -362,8 +362,9 @@ _coda_project_start_new() {
     local name="$1"
     local message="$2"
     local project_dir="$PROJECTS_DIR/$name"
-    local repo_url="git@github.com:${GIT_ORG}/${name}.git"
+    local repo_url="git@github.com:${NEW_PROJECT_GITHUB_OWNER}/${name}.git"
     local branch="$DEFAULT_BRANCH"
+    local worktree_dir="$project_dir/$branch"
 
     if [ -z "$name" ]; then
         echo "Usage: coda project start --new <repo-name> [--message \"...\"]"
@@ -381,30 +382,56 @@ _coda_project_start_new() {
         return 1
     fi
 
-    echo "Creating repository: ${GIT_ORG}/${name}"
-    if ! gh repo create "${GIT_ORG}/${name}" --private; then
+    echo "Creating repository: ${NEW_PROJECT_GITHUB_OWNER}/${name}"
+    if ! gh repo create "${NEW_PROJECT_GITHUB_OWNER}/${name}" --private; then
         echo "Failed to create repository on GitHub."
         return 1
     fi
 
-    # Bootstrap: temp repo → initial commit → push
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    git init "$tmpdir" --quiet -b "$branch"
-
-    echo "# $name" > "$tmpdir/README.md"
-    if [ -n "$message" ]; then
-        printf '# %s\n\n%s\n' "$name" "$message" > "$tmpdir/AGENTS.md"
+    mkdir -p "$project_dir" "$worktree_dir"
+    if ! git init --bare --initial-branch="$branch" "$project_dir/.bare" --quiet; then
+        rm -rf "$project_dir"
+        echo "Failed to create local bare repository."
+        return 1
     fi
 
-    git -C "$tmpdir" add -A
-    git -C "$tmpdir" commit -m "Initial commit" --quiet
-    git -C "$tmpdir" remote add "$GIT_REMOTE" "$repo_url"
-    git -C "$tmpdir" push -u "$GIT_REMOTE" "$branch" --quiet
-    rm -rf "$tmpdir"
+    printf 'gitdir: ./.bare\n' > "$project_dir/.git"
+    git -C "$project_dir" config worktree.useRelativePaths true
+
+    if ! git --git-dir="$project_dir/.bare" --work-tree="$worktree_dir" \
+        checkout --orphan "$branch" >/dev/null 2>&1; then
+        rm -rf "$project_dir"
+        echo "Failed to create initial worktree."
+        return 1
+    fi
+
+    echo "# $name" > "$worktree_dir/README.md"
+    if [ -n "$message" ]; then
+        printf '%s\n' "$message" > "$worktree_dir/AGENTS.md"
+    fi
+
+    if ! git --git-dir="$project_dir/.bare" --work-tree="$worktree_dir" add -A ||
+        ! git --git-dir="$project_dir/.bare" --work-tree="$worktree_dir" commit -m "Initial commit" --quiet ||
+        ! git --git-dir="$project_dir/.bare" --work-tree="$worktree_dir" remote add "$GIT_REMOTE" "$repo_url" ||
+        ! git -C "$project_dir" config remote."$GIT_REMOTE".fetch \
+            "+refs/heads/*:refs/remotes/${GIT_REMOTE}/*" ||
+        ! git --git-dir="$project_dir/.bare" --work-tree="$worktree_dir" push -u "$GIT_REMOTE" "$branch" --quiet; then
+        rm -rf "$project_dir"
+        echo "Failed to bootstrap the new repository."
+        return 1
+    fi
+
+    rm -rf "$worktree_dir"
+    if ! git -C "$project_dir" worktree add "$worktree_dir" "$branch" >/dev/null 2>&1; then
+        rm -rf "$project_dir"
+        echo "Failed to register the initial worktree."
+        return 1
+    fi
 
     echo ""
-    _coda_project_add "$repo_url" "$name"
+    echo "Project ready: $project_dir"
+    echo "Opening session in $worktree_dir"
+    _coda_attach "$name" "$worktree_dir"
 }
 
 # coda project add <repo-url> [name]  (kept as internal helper; use 'coda project start --repo')
