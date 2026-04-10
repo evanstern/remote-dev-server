@@ -22,6 +22,10 @@ _coda_sanitize_session_name() {
     printf '%s' "$1" | tr '.' '-'
 }
 
+_coda_cmd() {
+    printf '%s' "${CODA_COMMAND:-coda}"
+}
+
 _coda_detect_default_branch() {
     local project_dir="$1"
     local ref
@@ -62,6 +66,17 @@ CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
 #   --layout <name>               override the tmux layout
 #
 coda() {
+    local CODA_COMMAND="coda"
+    _coda_main "$@"
+}
+
+coda-dev() {
+    local CODA_COMMAND="coda-dev"
+    local SESSION_PREFIX="${CODA_DEV_SESSION_PREFIX:-coda-dev-}"
+    _coda_main "$@"
+}
+
+_coda_main() {
     local _coda_profile="" _coda_layout=""
     local args=()
     local status=0
@@ -167,7 +182,7 @@ _coda_ls() {
 
     if [ -z "$sessions" ]; then
         echo "No active sessions."
-        echo "Start one with: coda [name]"
+        echo "Start one with: $(_coda_cmd) [name]"
     else
         echo "Active sessions:"
         echo "$sessions" | while IFS= read -r line; do
@@ -268,14 +283,16 @@ _coda_auth() {
 # ===========================================================================
 _coda_project() {
     local subcmd="${1:-}"
+    local cmd
+    cmd=$(_coda_cmd)
     case "$subcmd" in
         start)  shift; _coda_project_start "$@" ;;
         add)    shift; _coda_project_add "$@" ;;
         workon) shift; _coda_project_workon "$@" ;;
         close)  shift; _coda_project_close "$@" ;;
         ls)     _coda_project_ls ;;
-        ""|help) echo "Usage: coda project <start|workon|close|ls>" ;;
-        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: coda project <start|workon|close|ls>"; return 1 ;;
+        ""|help) echo "Usage: $cmd project <start|workon|close|ls>" ;;
+        *)    echo "Unknown project subcommand: $subcmd"; echo "Usage: $cmd project <start|workon|close|ls>"; return 1 ;;
     esac
 }
 
@@ -308,15 +325,17 @@ _coda_project_start() {
 
 # coda project start (no args) — reconnect to existing main/master session
 _coda_project_start_reconnect() {
+    local cmd
+    cmd=$(_coda_cmd)
     local project_root
     project_root=$(_coda_find_project_root)
     if [ -z "$project_root" ]; then
         echo "Not inside a coda project directory."
         echo ""
         echo "Usage:"
-        echo "  coda project start                           Reconnect (from inside a project)"
-        echo "  coda project start --repo <url> [name]       Clone an existing repo"
-        echo "  coda project start --new <name> [-m \"...\"]   Create a new repo"
+        echo "  $cmd project start                           Reconnect (from inside a project)"
+        echo "  $cmd project start --repo <url> [name]       Clone an existing repo"
+        echo "  $cmd project start --new <name> [-m \"...\"]   Create a new repo"
         return 1
     fi
 
@@ -352,13 +371,15 @@ _coda_project_start_reconnect() {
     echo "No active session found for project: $project_name"
     echo ""
     echo "Start one with:"
-    echo "  coda project workon $project_name"
-    echo "  coda                                (from within the project)"
+    echo "  $cmd project workon $project_name"
+    echo "  $cmd                                (from within the project)"
     return 1
 }
 
 # coda project start --new <name> [--message "..."]
 _coda_project_start_new() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="$1"
     local message="$2"
     local project_dir="$PROJECTS_DIR/$name"
@@ -366,7 +387,7 @@ _coda_project_start_new() {
     local branch="$DEFAULT_BRANCH"
 
     if [ -z "$name" ]; then
-        echo "Usage: coda project start --new <repo-name> [--message \"...\"]"
+        echo "Usage: $cmd project start --new <repo-name> [--message \"...\"]"
         return 1
     fi
 
@@ -409,11 +430,13 @@ _coda_project_start_new() {
 
 # coda project add <repo-url> [name]  (kept as internal helper; use 'coda project start --repo')
 _coda_project_add() {
+    local cmd
+    cmd=$(_coda_cmd)
     local repo="${1:-}"
     local name="${2:-$(basename "${repo%.git}")}"
 
     if [ -z "$repo" ]; then
-        echo "Usage: coda project start --repo <repo-url> [name]"
+        echo "Usage: $cmd project start --repo <repo-url> [name]"
         return 1
     fi
 
@@ -472,11 +495,13 @@ _coda_project_add() {
 
 # coda project workon <name> [branch]
 _coda_project_workon() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     local branch="${2:-}"
 
     if [ -z "$name" ]; then
-        echo "Usage: coda project workon <name> [branch]"
+        echo "Usage: $cmd project workon <name> [branch]"
         return 1
     fi
 
@@ -484,7 +509,7 @@ _coda_project_workon() {
 
     if [ ! -d "$project_dir/.bare" ]; then
         echo "Not a coda project: $name"
-        echo "Add it first: coda project start --repo <repo-url>"
+        echo "Add it first: $cmd project start --repo <repo-url>"
         return 1
     fi
 
@@ -510,6 +535,8 @@ _coda_project_workon() {
 
 # coda project ls
 _coda_project_ls() {
+    local cmd
+    cmd=$(_coda_cmd)
     if [ ! -d "$PROJECTS_DIR" ]; then
         echo "No projects directory: $PROJECTS_DIR"
         return 1
@@ -525,17 +552,19 @@ _coda_project_ls() {
 
     if [ "$found" -eq 0 ]; then
         echo "No projects found in $PROJECTS_DIR"
-        echo "Add one with: coda project start --repo <repo-url>"
+        echo "Add one with: $cmd project start --repo <repo-url>"
     fi
 }
 
 _coda_project_close() {
+    local cmd
+    cmd=$(_coda_cmd)
     local delete=false
 
     while [ $# -gt 0 ]; do
         case "$1" in
             --delete) delete=true; shift ;;
-            *) echo "Usage: coda project close [--delete]"; return 1 ;;
+            *) echo "Usage: $cmd project close [--delete]"; return 1 ;;
         esac
     done
 
@@ -623,24 +652,28 @@ _coda_project_close() {
 # ===========================================================================
 _coda_feature() {
     local subcmd="${1:-}"
+    local cmd
+    cmd=$(_coda_cmd)
     case "$subcmd" in
         start)  shift; _coda_feature_start "$@" ;;
         done)   shift; _coda_feature_done "$@" ;;
         finish) shift; _coda_feature_finish "$@" ;;
         ls)     _coda_feature_ls ;;
-        ""|help) echo "Usage: coda feature <start|done|finish|ls>" ;;
-        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: coda feature <start|done|finish|ls>"; return 1 ;;
+        ""|help) echo "Usage: $cmd feature <start|done|finish|ls>" ;;
+        *)    echo "Unknown feature subcommand: $subcmd"; echo "Usage: $cmd feature <start|done|finish|ls>"; return 1 ;;
     esac
 }
 
 # coda feature start <branch> [base] [project]
 _coda_feature_start() {
+    local cmd
+    cmd=$(_coda_cmd)
     local branch="${1:-}"
     local base="${2:-}"
     local project_name="${3:-}"
 
     if [ -z "$branch" ]; then
-        echo "Usage: coda feature start <branch> [base-branch] [project-name]"
+        echo "Usage: $cmd feature start <branch> [base-branch] [project-name]"
         return 1
     fi
 
@@ -648,7 +681,7 @@ _coda_feature_start() {
     project_root=$(_coda_find_project_root)
     if [ -z "$project_root" ]; then
         echo "Not inside a coda project directory."
-        echo "cd into a project first, or run: coda project start --repo <url>"
+        echo "cd into a project first, or run: $cmd project start --repo <url>"
         return 1
     fi
 
@@ -677,11 +710,13 @@ _coda_feature_start() {
 
 # coda feature done <branch> [project]
 _coda_feature_done() {
+    local cmd
+    cmd=$(_coda_cmd)
     local branch="${1:-}"
     local project_name="${2:-}"
 
     if [ -z "$branch" ]; then
-        echo "Usage: coda feature done <branch> [project-name]"
+        echo "Usage: $cmd feature done <branch> [project-name]"
         return 1
     fi
 
@@ -721,11 +756,13 @@ _coda_feature_done() {
 
 # coda feature finish [--force]
 _coda_feature_finish() {
+    local cmd
+    cmd=$(_coda_cmd)
     local force=false
     while [ $# -gt 0 ]; do
         case "$1" in
             --force|-f) force=true; shift ;;
-            *) echo "Usage: coda feature finish [--force]"; return 1 ;;
+            *) echo "Usage: $cmd feature finish [--force]"; return 1 ;;
         esac
     done
 
@@ -759,7 +796,7 @@ _coda_feature_finish() {
             echo "  git status:"
             git -C "$PWD" status --short
             echo ""
-            echo "To discard changes and tear down anyway: coda feature finish --force"
+            echo "To discard changes and tear down anyway: $cmd feature finish --force"
             return 1
         fi
 
@@ -768,7 +805,7 @@ _coda_feature_finish() {
             echo "  Untracked:"
             git -C "$PWD" ls-files --others --exclude-standard | sed 's/^/    /'
             echo ""
-            echo "To discard and tear down anyway: coda feature finish --force"
+            echo "To discard and tear down anyway: $cmd feature finish --force"
             return 1
         fi
     fi
@@ -815,16 +852,20 @@ _coda_feature_ls() {
 # ===========================================================================
 _coda_profile_cmd() {
     local subcmd="${1:-}"
+    local cmd
+    cmd=$(_coda_cmd)
     case "$subcmd" in
         ls)     _coda_profile_ls ;;
         create) shift; _coda_profile_create "$@" ;;
         show)   shift; _coda_profile_show "$@" ;;
-        ""|help) echo "Usage: coda profile <ls|create|show>" ;;
+        ""|help) echo "Usage: $cmd profile <ls|create|show>" ;;
         *)      echo "Unknown profile subcommand: $subcmd"; return 1 ;;
     esac
 }
 
 _coda_profile_ls() {
+    local cmd
+    cmd=$(_coda_cmd)
     echo "Available profiles:"
     local found=0
     local name
@@ -838,18 +879,20 @@ _coda_profile_ls() {
 
     if [ "$found" -eq 0 ]; then
         echo "  (none)"
-        echo "Create one with: coda profile create <name>"
+        echo "Create one with: $cmd profile create <name>"
     fi
 
     echo ""
     echo "Current defaults: layout=$DEFAULT_LAYOUT  nvim=$DEFAULT_NVIM_APPNAME"
-    echo "Run 'coda layout ls' to see available layouts."
+    echo "Run '$cmd layout ls' to see available layouts."
 }
 
 _coda_profile_create() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     if [ -z "$name" ]; then
-        echo "Usage: coda profile create <name>"
+        echo "Usage: $cmd profile create <name>"
         return 1
     fi
 
@@ -863,9 +906,9 @@ _coda_profile_create() {
 
     cat > "$profile_file" <<TMPL
 # Coda profile: $name
-# Used with: coda --profile $name [session]
+# Used with: $cmd --profile $name [session]
 
-# tmux layout (see available: coda profile ls)
+# tmux layout (see available: $cmd profile ls)
 CODA_LAYOUT="$DEFAULT_LAYOUT"
 
 # Neovim config directory name (~/.config/<CODA_NVIM_APPNAME>/)
@@ -873,13 +916,15 @@ CODA_NVIM_APPNAME="nvim-${name}"
 TMPL
 
     echo "Created: $profile_file"
-    echo "Edit to customize, then use: coda --profile $name [session]"
+    echo "Edit to customize, then use: $cmd --profile $name [session]"
 }
 
 _coda_profile_show() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     if [ -z "$name" ]; then
-        echo "Usage: coda profile show <name>"
+        echo "Usage: $cmd profile show <name>"
         return 1
     fi
 
@@ -900,19 +945,21 @@ _coda_profile_show() {
 # ===========================================================================
 _coda_layout_cmd() {
     local subcmd="${1:-}"
+    local cmd
+    cmd=$(_coda_cmd)
     case "$subcmd" in
         apply)  shift; _coda_layout_apply "$@" ;;
         ls)     _coda_layout_ls ;;
         show)   shift; _coda_layout_show "$@" ;;
         create) shift; _coda_layout_create "$@" ;;
-        ""|help) cat <<'EOF'
-Usage: coda layout <apply|ls|show|create|name>
+        ""|help) cat <<EOF
+Usage: $cmd layout <apply|ls|show|create|name>
 
-  coda layout <name>           Apply layout to current session (shorthand)
-  coda layout apply <name>     Apply layout to current session
-  coda layout ls               List available layouts
-  coda layout show <name>      Show layout file contents
-  coda layout create <name>    Create a new layout from template
+  $cmd layout <name>           Apply layout to current session (shorthand)
+  $cmd layout apply <name>     Apply layout to current session
+  $cmd layout ls               List available layouts
+  $cmd layout show <name>      Show layout file contents
+  $cmd layout create <name>    Create a new layout from template
 EOF
         ;;
         *)      _coda_layout_apply "$subcmd" "$@" ;;
@@ -920,15 +967,17 @@ EOF
 }
 
 _coda_layout_apply() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     if [ -z "$name" ]; then
-        echo "Usage: coda layout apply <name>"
-        echo "       coda layout <name>"
+        echo "Usage: $cmd layout apply <name>"
+        echo "       $cmd layout <name>"
         return 1
     fi
 
     if [ -z "${TMUX:-}" ]; then
-        echo "Not inside a tmux session. Attach first: coda attach <session>"
+        echo "Not inside a tmux session. Attach first: $cmd attach <session>"
         return 1
     fi
 
@@ -955,6 +1004,8 @@ _coda_layout_apply() {
 }
 
 _coda_layout_ls() {
+    local cmd
+    cmd=$(_coda_cmd)
     echo "Available layouts:"
     local seen="" name source
     for f in "$CODA_LAYOUTS_DIR"/*.sh "$_CODA_DIR/layouts"/*.sh; do
@@ -972,14 +1023,16 @@ _coda_layout_ls() {
     echo ""
     echo "Default: $DEFAULT_LAYOUT"
     echo ""
-    echo "Apply to current session:  coda layout <name>"
-    echo "Create a new layout:       coda layout create <name>"
+    echo "Apply to current session:  $cmd layout <name>"
+    echo "Create a new layout:       $cmd layout create <name>"
 }
 
 _coda_layout_show() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     if [ -z "$name" ]; then
-        echo "Usage: coda layout show <name>"
+        echo "Usage: $cmd layout show <name>"
         return 1
     fi
 
@@ -1001,9 +1054,11 @@ _coda_layout_show() {
 }
 
 _coda_layout_create() {
+    local cmd
+    cmd=$(_coda_cmd)
     local name="${1:-}"
     if [ -z "$name" ]; then
-        echo "Usage: coda layout create <name>"
+        echo "Usage: $cmd layout create <name>"
         return 1
     fi
 
@@ -1068,7 +1123,7 @@ SPAWN
 TMPL
 
     echo "Created: $layout_file"
-    echo "Edit it, then apply: coda layout $name"
+    echo "Edit it, then apply: $cmd layout $name"
 }
 
 # ===========================================================================
@@ -1076,31 +1131,35 @@ TMPL
 # ===========================================================================
 _coda_watch() {
     local subcmd="${1:-start}"
+    local cmd
+    cmd=$(_coda_cmd)
     local watcher_session="coda-watcher"
 
     case "$subcmd" in
         start)  _coda_watch_start "$watcher_session" ;;
         stop)   _coda_watch_stop "$watcher_session" ;;
         status) _coda_watch_status "$watcher_session" ;;
-        ""|help) echo "Usage: coda watch <start|stop|status>" ;;
-        *)    echo "Unknown watch subcommand: $subcmd"; echo "Usage: coda watch <start|stop|status>"; return 1 ;;
+        ""|help) echo "Usage: $cmd watch <start|stop|status>" ;;
+        *)    echo "Unknown watch subcommand: $subcmd"; echo "Usage: $cmd watch <start|stop|status>"; return 1 ;;
     esac
 }
 
 _coda_watch_start() {
+    local cmd
+    cmd=$(_coda_cmd)
     local watcher_session="$1"
 
     if tmux has-session -t "$watcher_session" 2>/dev/null; then
         echo "Watcher already running."
         echo "  View:  tmux attach -t $watcher_session"
-        echo "  Stop:  coda watch stop"
+        echo "  Stop:  $cmd watch stop"
         return 0
     fi
 
     tmux new-session -d -s "$watcher_session" "$_CODA_DIR/coda-watcher.sh"
     echo "Watcher started."
     echo "  View:  tmux attach -t $watcher_session"
-    echo "  Stop:  coda watch stop"
+    echo "  Stop:  $cmd watch stop"
 }
 
 _coda_watch_stop() {
@@ -1116,6 +1175,8 @@ _coda_watch_stop() {
 }
 
 _coda_watch_status() {
+    local cmd
+    cmd=$(_coda_cmd)
     local watcher_session="$1"
 
     if tmux has-session -t "$watcher_session" 2>/dev/null; then
@@ -1123,10 +1184,10 @@ _coda_watch_status() {
         created=$(tmux display-message -t "$watcher_session" -p '#{t:session_created}' 2>/dev/null)
         echo "Watcher: running (since $created)"
         echo "  View:  tmux attach -t $watcher_session"
-        echo "  Stop:  coda watch stop"
+        echo "  Stop:  $cmd watch stop"
     else
         echo "Watcher: stopped"
-        echo "  Start: coda watch"
+        echo "  Start: $cmd watch"
     fi
 }
 
@@ -1134,57 +1195,64 @@ _coda_watch_status() {
 # coda help
 # ===========================================================================
 _coda_help() {
-    cat <<'EOF'
-coda — OpenCode session and project manager
+    local cmd
+    local prefix
+    cmd=$(_coda_cmd)
+    prefix="$SESSION_PREFIX"
+    cat <<EOF
+$cmd — OpenCode session and project manager
 
 USAGE
-  coda [name] [dir]           Attach or create a session (default: current dir)
-  coda ls                     List active sessions
-  coda switch                 fzf session picker with preview
-  coda serve [port]           Start OpenCode in headless server mode
-  coda auth                   Wire Claude Code credentials to OpenCode
+  $cmd [name] [dir]           Attach or create a session (default: current dir)
+  $cmd ls                     List active sessions
+  $cmd switch                 fzf session picker with preview
+  $cmd serve [port]           Start OpenCode in headless server mode
+  $cmd auth                   Wire Claude Code credentials to OpenCode
 
-  coda project start                              Reconnect to main/master session
-  coda project start --repo <url> [name]          Clone a repo as a bare project
-  coda project start --new <name> [-m "..."]      Create a new repo on GitHub
-  coda project workon <name> [branch]             Open a project session
-  coda project close [--delete]                   Close project sessions, optionally delete folders
-  coda project ls                                 List projects in PROJECTS_DIR
+  $cmd project start                              Reconnect to main/master session
+  $cmd project start --repo <url> [name]          Clone a repo as a bare project
+  $cmd project start --new <name> [-m "..."]      Create a new repo on GitHub
+  $cmd project workon <name> [branch]             Open a project session
+  $cmd project close [--delete]                   Close project sessions, optionally delete folders
+  $cmd project ls                                 List projects in PROJECTS_DIR
 
-  coda feature start <branch> [base] [project]   New worktree + session
-  coda feature done  <branch> [project]          Teardown worktree + session
-  coda feature finish [--force]                  Teardown current feature (agent-safe)
-  coda feature ls                                List worktrees for this project
+  $cmd feature start <branch> [base] [project]   New worktree + session
+  $cmd feature done  <branch> [project]          Teardown worktree + session
+  $cmd feature finish [--force]                  Teardown current feature (agent-safe)
+  $cmd feature ls                                List worktrees for this project
 
-  coda layout <name>                Apply a layout to the current session
-  coda layout ls                   List available layouts
-  coda layout show <name>          Show layout file contents
-  coda layout create <name>        Create a new layout from template
+  $cmd layout <name>               Apply a layout to the current session
+  $cmd layout ls                   List available layouts
+  $cmd layout show <name>          Show layout file contents
+  $cmd layout create <name>        Create a new layout from template
 
-  coda profile ls                  List profiles
-  coda profile create <name>       Create a new profile
-  coda profile show <name>         Show profile settings
+  $cmd profile ls                  List profiles
+  $cmd profile create <name>       Create a new profile
+  $cmd profile show <name>         Show profile settings
 
-  coda watch                       Start monitoring sessions (bell on idle)
-  coda watch stop                  Stop the watcher
-  coda watch status                Check if watcher is running
+  $cmd watch                       Start monitoring sessions (bell on idle)
+  $cmd watch stop                  Stop the watcher
+  $cmd watch status                Check if watcher is running
 
-  coda help                   Show this help
+  $cmd help                        Show this help
 
 GLOBAL FLAGS
   --profile <name>            Use a config profile (layout + nvim config)
   --layout <name>             Override the tmux layout for this session
 
 EXAMPLES
-  coda project start --repo git@github.com:user/myapp.git
-  coda project start --new my-tool -m "CLI for managing widgets"
+  $cmd project start --repo git@github.com:user/myapp.git
+  $cmd project start --new my-tool -m "CLI for managing widgets"
   cd ~/projects/myapp/main
-  coda feature start auth
-  coda --profile experimental feature start auth
-  coda --layout classic myapp
-  coda ls
-  coda switch
-  coda feature done auth
+  $cmd feature start auth
+  $cmd --profile experimental feature start auth
+  $cmd --layout classic myapp
+  $cmd ls
+  $cmd switch
+  $cmd feature done auth
+
+SESSION PREFIX
+  $cmd uses tmux session prefix: $prefix
 
 Run 'man coda' for the full manual.
 EOF

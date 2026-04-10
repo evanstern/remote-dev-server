@@ -406,63 +406,62 @@ ok "Helper scripts installed to ~/.local/bin/"
 
 # --- Shell functions and completions ---
 
-# Prefer .bashrc on Ubuntu (default shell); fall back to .zshrc
-SHELL_RC=""
-if [ -f "$HOME/.bashrc" ]; then
-    SHELL_RC="$HOME/.bashrc"
-elif [ -f "$HOME/.zshrc" ]; then
-    SHELL_RC="$HOME/.zshrc"
+RC_FILES=()
+[ -f "$HOME/.bashrc" ] && RC_FILES+=("$HOME/.bashrc")
+[ -f "$HOME/.zshrc" ] && RC_FILES+=("$HOME/.zshrc")
+
+SOURCE_LINE="source \"$STABLE_DIR/shell-functions.sh\""
+SOURCE_LINES=("$SOURCE_LINE")
+if [ "$SCRIPT_DIR" != "$STABLE_DIR" ]; then
+    SOURCE_LINES+=("[ -f \"$SCRIPT_DIR/shell-functions.sh\" ] && source \"$SCRIPT_DIR/shell-functions.sh\"")
 fi
 
-SOURCE_LINE="source $STABLE_DIR/shell-functions.sh"
-
-if [ -n "$SHELL_RC" ]; then
-    if grep -qF "shell-functions.sh" "$SHELL_RC" 2>/dev/null; then
-        EXISTING="$(grep -F "shell-functions.sh" "$SHELL_RC" | tail -1)"
-        if [ "$EXISTING" = "$SOURCE_LINE" ]; then
-            ok "Shell functions — already sourced in $SHELL_RC"
-        else
-            sed -i "\|source .*/shell-functions\.sh|d" "$SHELL_RC"
-            printf '\n# coda — OpenCode session manager\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
-            ok "Shell functions updated in $SHELL_RC (was: $EXISTING)"
-        fi
-    else
-        printf '\n# coda — OpenCode session manager\n%s\n' "$SOURCE_LINE" >> "$SHELL_RC"
-        ok "Shell functions added to $SHELL_RC"
-    fi
+if [ "${#RC_FILES[@]}" -gt 0 ]; then
+    for SHELL_RC in "${RC_FILES[@]}"; do
+        sed -i '/# coda — OpenCode session manager/d' "$SHELL_RC"
+        sed -i '\|source .*/shell-functions\.sh|d' "$SHELL_RC"
+        printf '\n# coda — OpenCode session manager\n' >> "$SHELL_RC"
+        for line in "${SOURCE_LINES[@]}"; do
+            printf '%s\n' "$line" >> "$SHELL_RC"
+        done
+        ok "Shell functions updated in $SHELL_RC"
+    done
 else
-    info "No shell RC found. Add this line manually:"
+    info "No shell RC found. Add these lines manually:"
     info "  $SOURCE_LINE"
+    if [ "$SCRIPT_DIR" != "$STABLE_DIR" ]; then
+        info "  [ -f \"$SCRIPT_DIR/shell-functions.sh\" ] && source \"$SCRIPT_DIR/shell-functions.sh\""
+    fi
 fi
 
 # --- Tab completion ---
 
 if [ -f "$HOME/.bashrc" ]; then
-    COMPLETION_LINE="source $STABLE_DIR/completions/coda.bash"
-    if grep -qF "completions/coda.bash" "$HOME/.bashrc" 2>/dev/null; then
-        EXISTING="$(grep -F "completions/coda.bash" "$HOME/.bashrc" | tail -1)"
-        if [ "$EXISTING" = "$COMPLETION_LINE" ]; then
-            ok "Bash completion — already installed"
-        else
-            sed -i "\|source .*/completions/coda\.bash|d" "$HOME/.bashrc"
-            printf '\n# coda tab completion\n%s\n' "$COMPLETION_LINE" >> "$HOME/.bashrc"
-            ok "Bash completion updated in ~/.bashrc"
-        fi
-    else
-        printf '\n# coda tab completion\n%s\n' "$COMPLETION_LINE" >> "$HOME/.bashrc"
-        ok "Bash completion added to ~/.bashrc"
+    COMPLETION_LINES=("source \"$STABLE_DIR/completions/coda.bash\"")
+    if [ "$SCRIPT_DIR" != "$STABLE_DIR" ]; then
+        COMPLETION_LINES+=("[ -f \"$SCRIPT_DIR/completions/coda.bash\" ] && source \"$SCRIPT_DIR/completions/coda.bash\"")
     fi
+    sed -i '/# coda tab completion/d' "$HOME/.bashrc"
+    sed -i '\|source .*/completions/coda\.bash|d' "$HOME/.bashrc"
+    printf '\n# coda tab completion\n' >> "$HOME/.bashrc"
+    for line in "${COMPLETION_LINES[@]}"; do
+        printf '%s\n' "$line" >> "$HOME/.bashrc"
+    done
+    ok "Bash completion updated in ~/.bashrc"
 fi
 
 if [ -f "$HOME/.zshrc" ]; then
-    FPATH_LINE="fpath=($STABLE_DIR/completions \$fpath)"
-    COMPINIT_LINE="autoload -Uz compinit && compinit"
-    if grep -qF "completions/coda" "$HOME/.zshrc" 2>/dev/null; then
-        ok "Zsh completion — already installed"
+    if [ "$SCRIPT_DIR" != "$STABLE_DIR" ]; then
+        FPATH_LINE="fpath=($SCRIPT_DIR/completions $STABLE_DIR/completions \$fpath)"
     else
-        printf '\n# coda tab completion\n%s\n%s\n' "$FPATH_LINE" "$COMPINIT_LINE" >> "$HOME/.zshrc"
-        ok "Zsh completion added to ~/.zshrc"
+        FPATH_LINE="fpath=($STABLE_DIR/completions \$fpath)"
     fi
+    COMPINIT_LINE="autoload -Uz compinit && compinit"
+    sed -i '/# coda tab completion/d' "$HOME/.zshrc"
+    sed -i '\|completions/coda|d' "$HOME/.zshrc"
+    sed -i '/autoload -Uz compinit && compinit/d' "$HOME/.zshrc"
+    printf '\n# coda tab completion\n%s\n%s\n' "$FPATH_LINE" "$COMPINIT_LINE" >> "$HOME/.zshrc"
+    ok "Zsh completion updated in ~/.zshrc"
 fi
 
 # --- Oh My Posh prompt ---
@@ -550,7 +549,12 @@ echo "  Sign in to Claude:"
 echo "       claude auth login"
 echo ""
 echo "  Reload your shell:"
-echo "       source ${SHELL_RC:-~/.bashrc}"
+if [ -f "$HOME/.bashrc" ]; then
+    echo "       source ~/.bashrc"
+fi
+if [ -f "$HOME/.zshrc" ]; then
+    echo "       source ~/.zshrc"
+fi
 echo ""
 echo "  Enable Claude auth in OpenCode:"
 echo "       coda auth"
