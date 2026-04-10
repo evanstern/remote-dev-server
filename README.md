@@ -197,6 +197,22 @@ tmux                       # start your first session
 All commands are provided by the `coda` function, sourced from `shell-functions.sh`.
 Run `man coda` for the full manual. Tab completion is available for all subcommands.
 
+### Global Flags
+
+These flags can be placed anywhere in the command:
+
+| Flag | Description |
+|---|---|
+| `--profile <name>` | Use a config profile (overrides layout + nvim config) |
+| `--layout <name>` | Override the tmux layout for this session |
+
+```bash
+coda --profile experimental feature start auth
+coda --layout classic myapp
+```
+
+---
+
 ### `coda [name] [dir]`
 
 Attach to an existing session or create a new one running OpenCode.
@@ -209,6 +225,17 @@ coda myapp ~/projects/myapp   # session in a specific directory
 
 - Strips the `coda-` prefix automatically if you type it (both work)
 - If already inside tmux, switches to the session instead of nesting
+
+---
+
+### `coda attach [name]`
+
+Explicitly attach to an existing session. Equivalent to `coda [name]`.
+
+```bash
+coda attach myapp
+```
+
 ---
 
 ### `coda ls`
@@ -288,6 +315,19 @@ coda project ls
 
 ---
 
+### `coda project workon <name> [branch]`
+
+Open a project session, creating a worktree if needed.
+
+```bash
+coda project workon myapp            # open on default branch
+coda project workon myapp develop    # open on specific branch
+```
+
+If the branch worktree doesn't exist yet, it's created automatically.
+
+---
+
 ### `coda project close [--delete]`
 
 Close the tmux sessions for the current project. Must be run from inside a coda
@@ -344,6 +384,23 @@ coda feature done auth
 ```
 
 > **Note:** Deletes the branch regardless of merge status. Merge or push first.
+
+---
+
+### `coda feature finish [--force]`
+
+Agent-safe teardown of the current feature branch. Detects the branch and
+project from the working directory (takes no arguments). The teardown runs in
+the background so it completes even when called from within the session being
+destroyed.
+
+```bash
+coda feature finish          # must be on a feature branch
+coda feature finish --force  # skip uncommitted changes check
+```
+
+Refuses to proceed if there are uncommitted or untracked changes unless
+`--force` is passed.
 
 ---
 
@@ -422,6 +479,50 @@ notifications for the same pane.
 
 ---
 
+### `coda layout [name]`
+
+Apply a tmux layout to the current session or manage layouts.
+
+```bash
+coda layout wide-twopane     # apply layout to current session
+coda layout ls               # list available layouts
+coda layout show four-pane   # show layout file contents
+coda layout create my-custom # create a new layout from template
+```
+
+Built-in layouts:
+
+| Layout | Description |
+|---|---|
+| `default` | Single pane running opencode |
+| `classic` | Single pane running opencode (alias) |
+| `wide-twopane` | opencode (left) + nvim (right) |
+| `three-pane` | opencode (top-left), nvim (top-right), shell (bottom) |
+| `four-pane` | Four-pane arrangement with opencode, nvim, lazygit, and yazi |
+
+User-created layouts in `CODA_LAYOUTS_DIR` override built-ins of the same name.
+
+---
+
+### `coda profile <ls|create|show>`
+
+Manage config profiles that bundle layout and nvim settings.
+
+```bash
+coda profile ls              # list available profiles
+coda profile create dev      # create a new profile
+coda profile show dev        # show profile settings
+```
+
+Profiles are `.env` files stored in `CODA_PROFILES_DIR` that can override
+`CODA_LAYOUT` and `CODA_NVIM_APPNAME`. Use with `--profile`:
+
+```bash
+coda --profile dev feature start auth
+```
+
+---
+
 ### `coda help`
 
 Print a short usage summary. Full manual: `man coda`.
@@ -433,14 +534,26 @@ Print a short usage summary. Full manual: `man coda`.
 Installed automatically by `install.sh` for both bash and zsh.
 
 ```
-coda <TAB>                     → ls switch serve auth project feature help
-coda feature <TAB>             → start done ls
+coda <TAB>                     → attach ls switch serve auth project feature
+                                 layout profile watch help [active sessions]
+coda attach <TAB>              → [active sessions]
+coda feature <TAB>             → start done finish ls
 coda feature start <TAB>       → [local git branches]
 coda feature done <TAB>        → [branches with active worktrees]
+coda feature finish <TAB>      → --force
 coda project <TAB>             → start workon close ls
 coda project close <TAB>       → --delete
 coda project start <TAB>       → --repo --new --message
+coda project workon <TAB>      → [project names] → [branches]
+coda layout <TAB>              → apply ls show create [available layouts]
+coda layout apply <TAB>        → [available layouts]
+coda profile <TAB>             → ls create show
+coda profile show <TAB>        → [available profiles]
+coda watch <TAB>               → start stop status
+coda serve <TAB>               → [port numbers]
 coda switch                    → (no completion needed — interactive fzf)
+coda --profile <TAB>           → [available profiles]
+coda --layout <TAB>            → [available layouts]
 ```
 
 ---
@@ -498,6 +611,11 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `OPENCODE_PORT_RANGE` | `10` | Number of ports to scan |
 | `OPENCODE_HEADLESS_PERMISSION` | `{"*":"allow"}` | Permission policy for `coda serve` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
+| `PACKAGE_MANAGER` | `npm` | Package manager preference (npm, pnpm, or yarn) |
+| `DEFAULT_LAYOUT` | `four-pane` | Default tmux layout when creating sessions |
+| `DEFAULT_NVIM_APPNAME` | `nvim` | Neovim config name (maps to `~/.config/<name>/`) |
+| `CODA_LAYOUTS_DIR` | `~/.config/coda/layouts` | User layout scripts directory |
+| `CODA_PROFILES_DIR` | `~/.config/coda/profiles` | User profile overrides directory |
 | `CODA_WATCH_INTERVAL` | `5` | Watcher poll interval (seconds) |
 | `CODA_WATCH_COOLDOWN` | `60` | Min seconds between repeat notifications per pane |
 | `AUTO_ATTACH_TMUX` | `true` | Auto-attach to tmux on SSH login |
@@ -540,13 +658,23 @@ every 15 minutes and restores them on reboot.
 ```
 coda/
 |-- install.sh              Full install: packages → config wiring
+|-- setup-vm.sh             Lightweight VM bootstrap (subset of install.sh)
 |-- coda-watcher.sh         Background session monitor (started via coda watch)
 |-- shell-functions.sh      The coda command (sourced into your shell)
 |-- completions/
 |   |-- coda.bash           Bash tab completion
 |   \-- coda.zsh            Zsh tab completion
+|-- layouts/
+|   |-- classic.sh          Single pane running opencode
+|   |-- default.sh          Single pane running opencode (default)
+|   |-- four-pane.sh        opencode + nvim + lazygit + yazi
+|   |-- three-pane.sh       opencode + nvim + shell
+|   \-- wide-twopane.sh     opencode (left) + nvim (right)
 |-- man/
 |   \-- coda.1              Man page (installed to /usr/local/share/man/man1/)
+|-- scripts/
+|   |-- streamdeck-vm104-connect.sh   Stream Deck helper
+|   \-- tmux-pane-picker.sh           Pane picker utility
 |-- tmux.conf               tmux configuration
 |-- tui.json.example        OpenCode TUI keybind config
 |-- .env.example            Configuration template
