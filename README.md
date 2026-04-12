@@ -673,7 +673,7 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `CODA_PROVIDER_MODE` | `claude-auth` | Provider mode for `coda auth`: `claude-auth` or `cliproxyapi` |
 | `CLIPROXYAPI_BASE_URL` | `http://localhost:8317/v1` | OpenAI-compatible base URL written into the managed CLIProxyAPI provider block |
 | `CLIPROXYAPI_API_KEY` | empty | Optional proxy API key used for cliproxy model discovery/status probes and written into the managed provider block when set |
-| `CLIPROXYAPI_HEALTH_URL` | `http://localhost:8317/healthz` | Optional health endpoint used by `coda provider status` |
+| `CLIPROXYAPI_HEALTH_URL` | empty | Optional health endpoint used by `coda provider status`; skipped when unset |
 | `CODA_OPENCODE_CONFIG_PATH` | empty | Optional override for the OpenCode config path; if set, Coda also exports `OPENCODE_CONFIG` |
 | `NODE_MAJOR_VERSION` | `20` | Node.js major version for install |
 | `PACKAGE_MANAGER` | `npm` | Package manager preference (npm, pnpm, or yarn) |

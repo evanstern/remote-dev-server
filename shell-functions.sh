@@ -42,7 +42,7 @@ CODA_PROFILES_DIR="${CODA_PROFILES_DIR:-$HOME/.config/coda/profiles}"
 CODA_LAYOUTS_DIR="${CODA_LAYOUTS_DIR:-$HOME/.config/coda/layouts}"
 CODA_PROVIDER_MODE="${CODA_PROVIDER_MODE:-claude-auth}"
 CLIPROXYAPI_BASE_URL="${CLIPROXYAPI_BASE_URL:-http://localhost:8317/v1}"
-CLIPROXYAPI_HEALTH_URL="${CLIPROXYAPI_HEALTH_URL:-http://localhost:8317/healthz}"
+CLIPROXYAPI_HEALTH_URL="${CLIPROXYAPI_HEALTH_URL:-}"
 CLIPROXYAPI_API_KEY="${CLIPROXYAPI_API_KEY:-}"
 
 # ===========================================================================
@@ -289,6 +289,8 @@ _coda_auth_cliproxyapi() {
         return 1
     fi
 
+    _coda_validate_api_key "$CLIPROXYAPI_API_KEY" || return 1
+
     local base_url
     base_url=$(_coda_normalize_url "$CLIPROXYAPI_BASE_URL") || {
         echo "Invalid CLIPROXYAPI_BASE_URL: $CLIPROXYAPI_BASE_URL"
@@ -354,7 +356,11 @@ _coda_provider_status() {
     fi
 
     if command -v jq &>/dev/null && [ -f "$config_path" ]; then
-        if jq -e '.provider.cliproxyapi != null' "$config_path" >/dev/null 2>&1; then
+        if ! jq -e 'type == "object"' "$config_path" >/dev/null 2>&1; then
+            echo "cliproxyapi provider block: config is not a valid JSON object ($config_path)"
+        elif ! jq -e '(.provider | type) == "object"' "$config_path" >/dev/null 2>&1; then
+            provider_block_present="no"
+        elif jq -e '.provider.cliproxyapi != null' "$config_path" >/dev/null 2>&1; then
             provider_block_present="yes"
             if jq -e '.provider.cliproxyapi.options.apiKey? != null and .provider.cliproxyapi.options.apiKey != ""' "$config_path" >/dev/null 2>&1; then
                 provider_auth_present="yes"
@@ -371,6 +377,8 @@ _coda_provider_status() {
     fi
 
     if [ "$mode" = "cliproxyapi" ]; then
+        _coda_validate_api_key "$CLIPROXYAPI_API_KEY" || return 1
+
         local base_url health_url models_url
 
         base_url=$(_coda_normalize_url "$CLIPROXYAPI_BASE_URL") || {
@@ -378,12 +386,16 @@ _coda_provider_status() {
             return 1
         }
 
-        health_url=$(_coda_normalize_url "$CLIPROXYAPI_HEALTH_URL") || {
-            echo "Health URL: invalid ($CLIPROXYAPI_HEALTH_URL)"
-            return 1
-        }
-
         models_url="${base_url}/models"
+
+        if [ -n "$CLIPROXYAPI_HEALTH_URL" ]; then
+            health_url=$(_coda_normalize_url "$CLIPROXYAPI_HEALTH_URL") || {
+                echo "Health URL: invalid ($CLIPROXYAPI_HEALTH_URL)"
+                return 1
+            }
+        else
+            health_url=""
+        fi
 
         if [ "$provider_block_present" = "yes" ]; then
             if [ -n "$CLIPROXYAPI_API_KEY" ] && [ "$provider_auth_present" = "no" ]; then
@@ -408,7 +420,11 @@ _coda_provider_status() {
         fi
 
         _coda_print_url_status "Base URL" "$base_url"
-        _coda_print_url_status "Health URL" "$health_url"
+        if [ -n "$health_url" ]; then
+            _coda_print_url_status "Health URL" "$health_url"
+        else
+            echo "Health URL: skipped (CLIPROXYAPI_HEALTH_URL not set)"
+        fi
         _coda_print_models_status "$models_url"
         echo "Readiness note: config and HTTP probes are not end-to-end runtime proof."
     fi
@@ -1420,6 +1436,19 @@ if [ -n "${CODA_OPENCODE_CONFIG_PATH:-}" ]; then
     export OPENCODE_CONFIG="$(_coda_resolve_opencode_config_path)"
 fi
 
+_coda_validate_api_key() {
+    local key="$1"
+    if [ -z "$key" ]; then
+        return 0
+    fi
+    case "$key" in
+        *$'\r'*|*$'\n'*)
+            echo "CLIPROXYAPI_API_KEY contains CR/LF characters; rejected to prevent header injection." >&2
+            return 1
+            ;;
+    esac
+}
+
 _coda_normalize_url() {
     local url="${1:-}"
     url="${url%/}"
@@ -1631,9 +1660,15 @@ _coda_fetch_cliproxyapi_models_response() {
     local models_url="$1"
 
     if [ -n "$CLIPROXYAPI_API_KEY" ]; then
+        local header_file
+        header_file=$(mktemp) || return 1
+        printf 'Authorization: Bearer %s' "$CLIPROXYAPI_API_KEY" > "$header_file"
         curl --silent --show-error --max-time 5 \
-            -H "Authorization: Bearer $CLIPROXYAPI_API_KEY" \
+            -H @"$header_file" \
             --write-out '\n%{http_code}' "$models_url" 2>/dev/null
+        local rc=$?
+        rm -f "$header_file"
+        return $rc
     else
         curl --silent --show-error --max-time 5 \
             --write-out '\n%{http_code}' "$models_url" 2>/dev/null
