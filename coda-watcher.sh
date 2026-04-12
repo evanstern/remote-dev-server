@@ -20,9 +20,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "$SCRIPT_DIR/.env" ]; then
+CODA_ENV_FILE="${CODA_ENV_FILE:-$SCRIPT_DIR/.env}"
+
+if [ "${CODA_SKIP_ENV:-false}" != "true" ] && [ -f "$CODA_ENV_FILE" ]; then
     # shellcheck source=/dev/null
-    set -a; source "$SCRIPT_DIR/.env"; set +a
+    set -a; source "$CODA_ENV_FILE"; set +a
 fi
 
 POLL_INTERVAL="${CODA_WATCH_INTERVAL:-5}"

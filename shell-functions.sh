@@ -7,9 +7,11 @@
 
 _CODA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "$_CODA_DIR/.env" ]; then
+_CODA_ENV_FILE="${CODA_ENV_FILE:-$_CODA_DIR/.env}"
+
+if [ "${CODA_SKIP_ENV:-false}" != "true" ] && [ -f "$_CODA_ENV_FILE" ]; then
     # shellcheck source=/dev/null
-    set -a; source "$_CODA_DIR/.env"; set +a
+    set -a; source "$_CODA_ENV_FILE"; set +a
 fi
 
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
