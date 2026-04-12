@@ -1298,221 +1298,203 @@ _coda_layout_snapshot() {
         return 1
     fi
 
-    local win_w win_h
+    local win_w win_h layout_str
     win_w=$(tmux display-message -p '#{window_width}')
     win_h=$(tmux display-message -p '#{window_height}')
-
-    local pane_data
-    pane_data=$(tmux list-panes -F '#{pane_index}|#{pane_left}|#{pane_top}|#{pane_width}|#{pane_height}|#{pane_start_command}|#{pane_current_command}|#{pane_title}|#{pane_active}')
+    layout_str=$(tmux display-message -p '#{window_layout}')
 
     local pane_count
-    pane_count=$(printf '%s\n' "$pane_data" | wc -l)
+    pane_count=$(tmux list-panes | wc -l)
 
     if [ "$pane_count" -lt 2 ]; then
-        echo "Only one pane — nothing to snapshot. Use 'coda layout create $name' for a blank template."
+        echo "Only one pane -- nothing to snapshot. Use 'coda layout create $name' for a blank template."
         return 1
     fi
 
-    local -a p_lefts p_tops p_widths p_heights p_cmds p_titles
-    local active_idx=0
-    while IFS='|' read -r idx left top width height start_cmd cur_cmd title active; do
-        p_lefts+=("$left")
-        p_tops+=("$top")
-        p_widths+=("$width")
-        p_heights+=("$height")
+    local -A sp_cmd=() sp_start=() sp_title=()
+    while IFS=$'\t' read -r pid pcmd pstart ptitle; do
+        local nid="${pid#%}"
+        sp_cmd[$nid]="$pcmd"
+        [ "$pstart" = "-" ] && pstart=""
+        sp_start[$nid]="$pstart"
+        sp_title[$nid]="$ptitle"
+    done < <(tmux list-panes \
+        -F $'#{pane_id}\t#{pane_current_command}\t#{?pane_start_command,#{pane_start_command},-}\t#{pane_title}')
 
-        local cmd
-        cmd=$(_coda_snapshot_clean_start_cmd "$start_cmd")
-        if [ -z "$cmd" ]; then
-            case "$cur_cmd" in
-                bash|zsh|sh|fish) cmd="" ;;
-                *) cmd="$cur_cmd" ;;
-            esac
+    # Templatize: replace pane IDs with __P0__, __P1__, etc. in the layout string.
+    # The awk parser walks the WxH,X,Y,ID grammar and only replaces leaf IDs.
+    local layout_tmpl n_panes
+    read -r layout_tmpl n_panes < <(echo "$layout_str" | awk '{
+        s = $0
+        match(s, /^[^,]+,/)
+        out = substr(s, RLENGTH + 1)
+        s = out; out = ""; n = 0
+        while (length(s) > 0) {
+            if (match(s, /^[0-9]+x[0-9]+,[0-9]+,[0-9]+/)) {
+                out = out substr(s, 1, RLENGTH)
+                s = substr(s, RLENGTH + 1)
+                if (substr(s, 1, 1) == ",") {
+                    out = out ","
+                    s = substr(s, 2)
+                    match(s, /^[0-9]+/)
+                    out = out "__P" n "__"
+                    n++
+                    s = substr(s, RLENGTH + 1)
+                } else {
+                    out = out substr(s, 1, 1)
+                    s = substr(s, 2)
+                }
+            } else {
+                out = out substr(s, 1, 1)
+                s = substr(s, 2)
+            }
+        }
+        print out, n
+    }')
+
+    if [ "$n_panes" -ne "$pane_count" ]; then
+        echo "Error: layout string has $n_panes panes but window has $pane_count" >&2
+        return 1
+    fi
+
+    # Extract leaf IDs (for resolving commands/titles)
+    local -a leaf_ids=()
+    mapfile -t leaf_ids < <(echo "$layout_str" | awk '{
+        s = $0; sub(/^[^,]+,/, "", s)
+        while (length(s) > 0) {
+            if (match(s, /^[0-9]+x[0-9]+,[0-9]+,[0-9]+/)) {
+                s = substr(s, RSTART + RLENGTH)
+                if (substr(s, 1, 1) == ",") {
+                    s = substr(s, 2)
+                    match(s, /^[0-9]+/)
+                    print substr(s, 1, RLENGTH)
+                    s = substr(s, RLENGTH + 1)
+                } else { s = substr(s, 2) }
+            } else { s = substr(s, 2) }
+        }
+    }')
+
+    local -a cmds=() titles=()
+    local i
+    for (( i = 0; i < pane_count; i++ )); do
+        local nid="${leaf_ids[$i]}"
+        cmds[$i]=$(_coda_snapshot_resolve_cmd "${sp_start[$nid]:-}" "${sp_cmd[$nid]:-bash}")
+        local t="${sp_title[$nid]:-}"
+        if [ -n "$t" ] && [ "${#t}" -le 20 ] && [[ "$t" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+            titles[$i]="$t"
+        else
+            titles[$i]=""
         fi
-        p_cmds+=("$cmd")
-
-        local clean_title=""
-        if [ -n "$title" ] && [ "${#title}" -le 20 ] && \
-           [[ "$title" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
-            clean_title="$title"
-        fi
-        p_titles+=("$clean_title")
-
-        [ "$active" = "1" ] && active_idx=$(( ${#p_lefts[@]} - 1 ))
-    done <<< "$pane_data"
-
-    local n=${#p_lefts[@]}
-
-    local tree_result
-    tree_result=$(_coda_snapshot_build_split_plan "$n" p_lefts p_tops p_widths p_heights "$win_w")
-
-    local order_str="${tree_result%%|*}"
-    local dirs_str="${tree_result##*|}"
-    local -a order=($order_str)
-    local -a split_dirs=($dirs_str)
-
-    local has_titles=false
-    for (( i = 0; i < n; i++ )); do
-        [ -n "${p_titles[${order[$i]}]}" ] && has_titles=true
     done
 
-    _coda_snapshot_write_file "$name" "$layout_file" "$n" "$win_w" "$win_h" \
-        order split_dirs p_lefts p_tops p_widths p_heights p_cmds p_titles "$has_titles"
+    local has_titles=false
+    for (( i = 0; i < pane_count; i++ )); do
+        [ -n "${titles[$i]}" ] && has_titles=true
+    done
+
+    _coda_snapshot_write_file "$name" "$layout_file" "$pane_count" \
+        "$win_w" "$win_h" "$layout_tmpl" "$has_titles" cmds titles
 
     chmod +x "$layout_file"
     echo "Snapshot saved: $layout_file"
-    echo "  Captured $n panes from ${win_w}x${win_h} window"
+    echo "  Captured $pane_count panes from ${win_w}x${win_h} window"
     echo "  Apply with: coda layout $name"
 }
 
-_coda_snapshot_clean_start_cmd() {
-    local raw="$1"
-    [ -z "$raw" ] && return
+_coda_snapshot_resolve_cmd() {
+    local start="$1" cur="$2"
 
-    local cmd="$raw"
-    cmd="${cmd#\"}"
-    cmd="${cmd%\"}"
+    if [ -n "$start" ]; then
+        start="${start#\"}"
+        start="${start%\"}"
+        start="${start//\\\\\$/\$}"
+        start="${start//\\\$/\$}"
+        start="${start%; exec \$SHELL}"
+        start="${start%; exec \"\$SHELL\"}"
+        [[ "$start" == /tmp/* ]] && start=""
+        case "$start" in bash|zsh|sh|fish) start="" ;; esac
+    fi
 
-    cmd="${cmd//\\\\\$/\$}"
-    cmd="${cmd//\\\$/\$}"
+    if [ -n "$start" ]; then
+        printf '%s' "$start"
+        return
+    fi
 
-    cmd="${cmd%; exec \$SHELL}"
-    cmd="${cmd%; exec \"\$SHELL\"}"
-
-    case "$cmd" in
-        bash|zsh|sh|fish) cmd="" ;;
+    case "$cur" in
+        lazygit|gitui|tig)  printf '%s' "$cur" ;;
+        opencode)           printf '%s' "opencode" ;;
+        yazi|nnn|lf|ranger) printf '%s' "$cur" ;;
+        nvim|vim|vi)        printf '%s' "$cur" ;;
     esac
-
-    printf '%s' "$cmd"
-}
-
-_coda_snapshot_build_split_plan() {
-    local n="$1"
-    local -n __s_lefts="$2" __s_tops="$3" __s_widths="$4" __s_heights="$5"
-    local total_w="$6"
-
-    local -a order dirs
-    local min_top="${__s_tops[0]}"
-    local i
-    for (( i = 1; i < n; i++ )); do
-        (( __s_tops[i] < min_top )) && min_top="${__s_tops[$i]}"
-    done
-
-    local first=-1
-    for (( i = 0; i < n; i++ )); do
-        if (( __s_lefts[i] == 0 && __s_tops[i] == min_top )); then
-            first="$i"
-            break
-        fi
-    done
-    (( first < 0 )) && first=0
-    order+=("$first")
-
-    local -a full_w_panes partial_panes
-    for (( i = 0; i < n; i++ )); do
-        (( i == first )) && continue
-        if (( __s_lefts[i] == 0 && __s_widths[i] >= total_w - 1 )); then
-            full_w_panes+=("$i")
-        else
-            partial_panes+=("$i")
-        fi
-    done
-
-    for i in "${full_w_panes[@]}"; do
-        dirs+=("v")
-        order+=("$i")
-    done
-
-    local swapped=true
-    while [ "$swapped" = true ]; do
-        swapped=false
-        local j
-        for (( j = 0; j < ${#partial_panes[@]} - 1; j++ )); do
-            local a="${partial_panes[$j]}" b="${partial_panes[$((j+1))]}"
-            if (( __s_lefts[a] > __s_lefts[b] )); then
-                partial_panes[$j]="$b"
-                partial_panes[$((j+1))]="$a"
-                swapped=true
-            fi
-        done
-    done
-
-    for i in "${partial_panes[@]}"; do
-        dirs+=("h")
-        order+=("$i")
-    done
-
-    echo "${order[*]}|${dirs[*]}"
 }
 
 _coda_snapshot_write_file() {
     local name="$1" layout_file="$2" n="$3" win_w="$4" win_h="$5"
-    local -n __order="$6" __split_dirs="$7" __w_lefts="$8" __w_tops="$9" __w_widths="${10}" __w_heights="${11}" __w_cmds="${12}" __w_titles="${13}"
-    local has_titles="${14}"
+    local layout_tmpl="$6" has_titles="$7"
+    local -n __cmds="$8" __titles="$9"
 
-    local first="${__order[0]}"
-    local first_cmd="${__w_cmds[$first]}"
-    local first_title="${__w_titles[$first]}"
+    local first_cmd="${__cmds[0]}"
+    local first_title="${__titles[0]}"
+
+    # tmux select-layout validates a checksum (16-bit LFSR over the body).
+    # We embed this awk one-liner so the generated script can recompute it
+    # after substituting pane IDs into the template.
+    local csum_awk='BEGIN{for(i=0;i<256;i++)_o[sprintf("%c",i)]=i}'
+    csum_awk+='{c=0;for(i=1;i<=length($0);i++){c=int(c/2)+(c%2)*32768;c=(c+_o[substr($0,i,1)])%65536}printf"%04x",c}'
 
     {
         echo '#!/usr/bin/env bash'
         echo '#'
-        echo "# ${name}.sh — tmux layout (captured from live session)"
+        echo "# ${name}.sh -- tmux layout (captured from live session)"
         echo '#'
         echo '# $1 = session name    $2 = working directory    $3 = NVIM_APPNAME'
         echo '#'
         echo "# Snapshot: ${n} panes from ${win_w}x${win_h} window"
+        for (( i = 0; i < n; i++ )); do
+            local desc="#   pane ${i}: ${__cmds[$i]:-shell}"
+            [ -n "${__titles[$i]}" ] && desc+=" [${__titles[$i]}]"
+            echo "$desc"
+        done
         echo ''
 
+        # ---- _layout_init ----
         echo '_layout_init() {'
         echo '    local session="$1" dir="$2" nvim_appname="${3:-nvim}"'
         echo "    local cols=\"\${COLUMNS:-${win_w}}\" rows=\"\${LINES:-${win_h}}\""
         echo ''
 
-        local init_first_arg=''
         if [ -n "$first_cmd" ]; then
-            init_first_arg=" \"${first_cmd}; exec \\\$SHELL\""
+            echo "    tmux new-session -d -s \"\$session\" -x \"\$cols\" -y \"\$rows\" -c \"\$dir\" \\"
+            echo "        \"${first_cmd}; exec \\\$SHELL\""
+        else
+            echo '    tmux new-session -d -s "$session" -x "$cols" -y "$rows" -c "$dir"'
         fi
-        echo "    tmux new-session -d -s \"\$session\" -x \"\$cols\" -y \"\$rows\" -c \"\$dir\"${init_first_arg}"
-        if [ -n "$first_title" ]; then
-            echo "    tmux select-pane -t \"\$session\" -T \"${first_title}\""
-        fi
+        [ -z "$first_title" ] || echo "    tmux select-pane -t \"\$session\" -T \"${first_title}\""
 
-        local i idx cmd title width height dir
-        for (( i = 1; i < n; i++ )); do
-            idx="${__order[$i]}"
-            cmd="${__w_cmds[$idx]}"
-            title="${__w_titles[$idx]}"
-            width="${__w_widths[$idx]}"
-            height="${__w_heights[$idx]}"
-            dir="${__split_dirs[$((i-1))]}"
+        if (( n > 1 )); then
+            echo ''
+            echo '    local pids=()'
+            echo '    pids+=("$(tmux display-message -t "$session" -p '\''#{pane_id}'\'')")'  
+
+            for (( i = 1; i < n; i++ )); do
+                local cmd="${__cmds[$i]}" title="${__titles[$i]}"
+                if [ -n "$cmd" ]; then
+                    echo "    pids+=(\"\$(tmux split-window -t \"\$session\" -c \"\$dir\" -P -F '#{pane_id}' \\"
+                    echo "        \"${cmd}; exec \\\$SHELL\")\")" 
+                else
+                    echo '    pids+=("$(tmux split-window -t "$session" -c "$dir" -P -F '\''#{pane_id}'\'')")'  
+                fi
+                [ -z "$title" ] || echo "    tmux select-pane -t \"\${pids[-1]}\" -T \"${title}\""
+            done
 
             echo ''
-            if [ "$dir" = "h" ]; then
-                echo "    local pane${i}_w=\$(( cols * ${width} / ${win_w} ))"
-                if [ -n "$cmd" ]; then
-                    echo "    tmux split-window -h -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_w\" \\"
-                    echo "        \"${cmd}; exec \\\$SHELL\""
-                else
-                    echo "    tmux split-window -h -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_w\""
-                fi
-            else
-                echo "    local pane${i}_h=\$(( rows * ${height} / ${win_h} ))"
-                if [ -n "$cmd" ]; then
-                    echo "    tmux split-window -v -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_h\" \\"
-                    echo "        \"${cmd}; exec \\\$SHELL\""
-                else
-                    echo "    tmux split-window -v -t \"\$session\" -c \"\$dir\" -l \"\$pane${i}_h\""
-                fi
-            fi
-            if [ -n "$title" ]; then
-                echo "    tmux select-pane -t \"\$session\" -T \"${title}\""
-            fi
-
-            if [ "$dir" = "v" ]; then
-                echo '    tmux select-pane -t "$session" -U'
-            fi
-        done
+            echo "    local body='${layout_tmpl}'"
+            for (( i = 0; i < n; i++ )); do
+                echo "    body=\"\${body/__P${i}__/\${pids[${i}]#%}}\""
+            done
+            echo "    local csum=\$(printf '%s' \"\$body\" | awk '${csum_awk}')"
+            echo '    tmux select-layout -t "$session" "${csum},${body}"'
+        fi
 
         if [ "$has_titles" = true ]; then
             echo ''
@@ -1522,53 +1504,45 @@ _coda_snapshot_write_file() {
             echo "    tmux set-option -t \"\$session\" pane-active-border-style 'fg=green,bold'"
             echo '    tmux set-option -t "$session" pane-border-format '\'' #{?pane_active,▸ ,  }#{pane_title} '\'''
         fi
-
         echo '    tmux select-pane -t "$session" -t 0'
         echo '}'
         echo ''
 
+        # ---- _layout_spawn ----
         echo '_layout_spawn() {'
         echo '    local session="$1" dir="$2" nvim_appname="${3:-nvim}"'
         echo ''
         echo '    local script'
         echo '    script=$(mktemp "${TMPDIR:-/tmp}/coda-layout.XXXXXX")'
-        echo '    cat > "$script" <<SETUP'
+        echo "    cat > \"\$script\" <<'SETUP'"
         echo '#!/usr/bin/env bash'
-        echo 'rm -f "\$0"'
-        echo 'ph=\$(tmux display-message -p '\''#{pane_height}'\'')'  
-        echo 'pw=\$(tmux display-message -p '\''#{pane_width}'\'')'  
+        echo 'rm -f "$0"'
+        echo 'dir="$1"'
+        echo ''
+
+        [ -z "$first_title" ] || echo "tmux select-pane -T \"${first_title}\""
+
+        echo 'pids=()'
+        echo 'pids+=("$(tmux display-message -p '\''#{pane_id}'\'')")'  
 
         for (( i = 1; i < n; i++ )); do
-            idx="${__order[$i]}"
-            cmd="${__w_cmds[$idx]}"
-            title="${__w_titles[$idx]}"
-            width="${__w_widths[$idx]}"
-            height="${__w_heights[$idx]}"
-            dir="${__split_dirs[$((i-1))]}"
-
-            echo ''
-            if [ "$dir" = "h" ]; then
-                if [ -n "$cmd" ]; then
-                    echo "tmux split-window -h -c \"\$dir\" -l \\\$(( pw * ${width} / ${win_w} )) \\"
-                    echo "    \"${cmd}; exec \\\\\\\$SHELL\""
-                else
-                    echo "tmux split-window -h -c \"\$dir\" -l \\\$(( pw * ${width} / ${win_w} ))"
-                fi
+            local cmd="${__cmds[$i]}" title="${__titles[$i]}"
+            if [ -n "$cmd" ]; then
+                echo "pids+=(\"\$(tmux split-window -c \"\$dir\" -P -F '#{pane_id}' \\"
+                echo "    \"${cmd}; exec \$SHELL\")\")"  
             else
-                if [ -n "$cmd" ]; then
-                    echo "tmux split-window -v -c \"\$dir\" -l \\\$(( ph * ${height} / ${win_h} )) \\"
-                    echo "    \"${cmd}; exec \\\\\\\$SHELL\""
-                else
-                    echo "tmux split-window -v -c \"\$dir\" -l \\\$(( ph * ${height} / ${win_h} ))"
-                fi
+                echo 'pids+=("$(tmux split-window -c "$dir" -P -F '\''#{pane_id}'\'')")'
             fi
-            if [ -n "$title" ]; then
-                echo "tmux select-pane -T \"${title}\""
-            fi
-            if [ "$dir" = "v" ]; then
-                echo 'tmux select-pane -U'
-            fi
+            [ -z "$title" ] || echo "tmux select-pane -t \"\${pids[-1]}\" -T \"${title}\""
         done
+
+        echo ''
+        echo "body='${layout_tmpl}'"
+        for (( i = 0; i < n; i++ )); do
+            echo "body=\"\${body/__P${i}__/\${pids[${i}]#%}}\""
+        done
+        echo "csum=\$(printf '%s' \"\$body\" | awk '${csum_awk}')"
+        echo 'tmux select-layout "${csum},${body}"'
 
         if [ "$has_titles" = true ]; then
             echo ''
@@ -1580,16 +1554,14 @@ _coda_snapshot_write_file() {
         fi
 
         echo ''
-        echo 'tmux select-pane -t "\$TMUX_PANE"'
+        echo 'tmux select-pane -t "${pids[0]}"'
         if [ -n "$first_cmd" ]; then
-            echo "${first_cmd}; exec \"\\\$SHELL\""
-        else
-            echo 'exec "\$SHELL"'
+            echo "${first_cmd}; exec \"\$SHELL\""
         fi
 
         echo 'SETUP'
         echo '    chmod +x "$script"'
-        echo '    tmux new-window -t "$session" -c "$dir" "$script"'
+        echo '    tmux new-window -t "$session" -c "$dir" "$script \\"$dir\\""'
         echo '}'        
         echo ''
         echo '_layout_apply() { _layout_init "$@"; }'
