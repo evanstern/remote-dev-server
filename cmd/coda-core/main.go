@@ -19,6 +19,8 @@ func main() {
 		err = runProvider(os.Args[2:])
 	case "watch":
 		err = runWatch(os.Args[2:])
+	case "github":
+		err = runGitHub(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -42,5 +44,7 @@ Commands:
   layout snapshot    Capture current tmux layout as a reusable layout script
   provider auth      Configure CLIProxyAPI provider in OpenCode config
   provider status    Show provider diagnostics
-  watch              Monitor OpenCode sessions and notify on attention needed`)
+  watch              Monitor OpenCode sessions and notify on attention needed
+  github token       Generate a GitHub App installation access token
+  github comment     Post a comment as the GitHub App identity`)
 }
