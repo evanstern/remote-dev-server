@@ -31,9 +31,7 @@ Its job is to produce the future canonical version of Coda without forcing `main
 
 `main` remains the current working implementation until this branch is ready to take over.
 
-During the rewrite, prefer `coda-dev` as the development-facing command name when the new workflow must coexist with an existing `coda` installation on the same machine.
-
-The product is still Coda. `coda-dev` is a temporary rewrite-phase entrypoint, not a permanent rename.
+Use `coda-dev` as a session-prefix alias when testing changes alongside running sessions. See `lib/core.sh` for the pattern.
 
 ## Scope of This Branch
 

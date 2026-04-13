@@ -3,6 +3,10 @@
 # core.sh — coda entry point, session attach/ls/switch/serve/help
 #
 
+# Session-prefix alias: isolates sessions under a separate prefix.
+# To create your own:
+#   coda-experiment() { local -x SESSION_PREFIX="coda-exp-"; coda "$@"; }
+#   complete -F _coda_complete coda-experiment  # optional: tab completion
 coda-dev() {
     local -x SESSION_PREFIX="${CODA_DEV_SESSION_PREFIX:-coda-dev-}"
     coda "$@"

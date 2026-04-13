@@ -143,7 +143,7 @@ The codebase is organized as modular shell libraries loaded by a thin entry poin
 shell-functions.sh          Loader: sources .env, sets defaults, loads lib/*.sh
 lib/
   helpers.sh                Shared utilities (sanitize, detect branch, find root)
-  core.sh                   Entry points: coda(), coda-dev(), attach/ls/switch/serve/help
+  core.sh                   Entry point: coda(), session-prefix aliases (coda-dev), attach/ls/switch/serve/help
   project.sh                Project management (start/add/workon/close/ls)
   feature.sh                Feature branch lifecycle (start/done/finish/ls)
   layout.sh                 Layout management (apply/ls/show/create)
@@ -158,19 +158,13 @@ test/                       Bats integration tests (module loading, functional)
 layouts/                    Built-in tmux layout scripts
 ```
 
-## Rewrite Branch Guidance
-
-This repository is currently being reshaped on a long-running rewrite branch.
+## Development Guidance
 
 While working here:
 
-- treat `main` as the current stable implementation
-- treat the rewrite branch as the place to build the future canonical version of Coda
-- prefer `coda-dev` as the rewrite-phase command name when validating the new workflow alongside stable `coda`
-- do not expand adjacent utilities before the core lifecycle is trustworthy
+- use `coda-dev` (or a custom session-prefix alias) when testing changes without disturbing running sessions
 - prefer small, testable slices over large conceptual rewrites
-
-The first proving slice is the core lifecycle spine described in `docs/coda-v1-slice-01-core-lifecycle.md`.
+- do not expand adjacent utilities before the core lifecycle is trustworthy
 
 ## Decision Rule
 
