@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Writes a default .editorconfig to new projects.
+# Runs after: coda project start --new / --repo
+#
+# Environment:
+#   CODA_PROJECT_NAME  project name
+#   CODA_PROJECT_DIR   project root directory
+
+set -euo pipefail
+
+config_file="${CODA_PROJECT_DIR:?}/.editorconfig"
+
+[ -f "$config_file" ] && exit 0
+
+cat > "$config_file" <<'EOF'
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[Makefile]
+indent_style = tab
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+EOF
+
+echo "  hook: wrote $config_file"

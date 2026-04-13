@@ -405,3 +405,65 @@ setup() {
 @test "coda-dev function is defined" {
     declare -f coda-dev &>/dev/null
 }
+
+# --- Hook system tests ---
+
+@test "_coda_run_hooks is defined" {
+    declare -f _coda_run_hooks &>/dev/null
+}
+
+@test "_coda_run_hooks is no-op for missing event directory" {
+    run _coda_run_hooks nonexistent-event
+    [ "$status" -eq 0 ]
+}
+
+@test "_coda_run_hooks runs executable scripts" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "hook-ran"\n' > "$tmpdir/test-event/01-test"
+    chmod +x "$tmpdir/test-event/01-test"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hook-ran"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks skips non-executable files" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "should-not-run"\n' > "$tmpdir/test-event/01-noexec"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"should-not-run"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks passes env vars to hooks" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "name=$CODA_PROJECT_NAME"\n' > "$tmpdir/test-event/01-env"
+    chmod +x "$tmpdir/test-event/01-env"
+    CODA_HOOKS_DIR="$tmpdir" CODA_PROJECT_NAME="testproj" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"name=testproj"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks reports failing hooks without blocking" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$tmpdir/test-event/01-fail"
+    chmod +x "$tmpdir/test-event/01-fail"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hook warning"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "built-in post-project-create hook exists and is executable" {
+    [ -x "$_CODA_DIR/hooks/post-project-create/00-editorconfig" ]
+}

@@ -81,6 +81,9 @@ _coda_feature_start() {
         fi
     fi
 
+    CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
+    CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
+        _coda_run_hooks post-feature-create
     _coda_attach "${project_name}--${branch}" "$worktree_dir"
 }
 
@@ -114,6 +117,11 @@ _coda_feature_done() {
     local worktree_dir="$project_root/$branch"
 
     echo "Cleaning up feature: $branch"
+
+    CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
+    CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
+    CODA_SESSION_NAME="$session" \
+        _coda_run_hooks pre-feature-teardown
 
     if tmux has-session -t "$session" 2>/dev/null; then
         echo "  Killing session: $session"

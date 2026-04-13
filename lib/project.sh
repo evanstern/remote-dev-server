@@ -162,6 +162,8 @@ _coda_project_start_new() {
 
     echo ""
     echo "Project ready: $project_dir"
+    CODA_PROJECT_NAME="$name" CODA_PROJECT_DIR="$project_dir" \
+        _coda_run_hooks post-project-create
     echo "Opening session in $worktree_dir"
     _coda_attach "$name" "$worktree_dir"
 }
@@ -224,6 +226,8 @@ _coda_project_add() {
 
     echo ""
     echo "Project ready: $project_dir"
+    CODA_PROJECT_NAME="$name" CODA_PROJECT_DIR="$project_dir" \
+        _coda_run_hooks post-project-create
     echo "Opening session in $project_dir/$branch"
     _coda_attach "$name" "$project_dir/$branch"
 }

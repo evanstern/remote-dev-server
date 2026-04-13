@@ -94,6 +94,10 @@ _coda_attach() {
         fi
 
         tmux set-environment -t "$session" CODA_DIR "$dir"
+
+        CODA_SESSION_NAME="$session" CODA_SESSION_DIR="$dir" \
+        CODA_SESSION_LAYOUT="$layout" \
+            _coda_run_hooks post-session-create
     fi
 
     if [ -n "${TMUX:-}" ]; then
