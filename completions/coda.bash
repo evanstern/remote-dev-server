@@ -250,4 +250,4 @@ _coda_complete() {
     return 0
 }
 
-complete -F _coda_complete coda
+complete -F _coda_complete coda coda-dev

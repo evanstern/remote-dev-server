@@ -12,6 +12,8 @@ You provision a VM (on Proxmox, or any Ubuntu host), run `./install.sh`, and get
 - **Fire-and-forget mode** — `opencode serve` exposes an HTTP API. Submit tasks from scripts, cron jobs, or your phone, and check results when you're back.
 - **`coda`** — a unified CLI that wraps all session, project, and feature management into one command with tab completion and a man page.
 
+On the rewrite branch, use `coda-dev` as the preferred development command when you need the new workflow to coexist with an existing stable `coda` installation. It behaves the same way, but defaults to a separate tmux session prefix so both command surfaces can live on one machine safely.
+
 ```
 +----------------------------------------------+
 |  YOUR DEVICES (laptop, phone, tablet)         |
@@ -107,6 +109,8 @@ CLIPROXYAPI_API_KEY=""      # optional; set if your proxy requires auth
 coda auth                  # write/update OpenCode provider config
 coda provider status       # probe config/auth readiness (not runtime proof)
 ```
+
+If you are working from the rewrite branch, prefer `coda-dev` for new development sessions. Stable `coda` remains available as a compatibility surface.
 
 ---
 
@@ -217,7 +221,8 @@ coda provider status       # probe config/auth readiness (not runtime proof)
 
 ## Shell Commands
 
-All commands are provided by the `coda` function, sourced from `shell-functions.sh`.
+All commands are provided by shell functions sourced from `shell-functions.sh`.
+On the rewrite branch, `coda-dev` is the preferred development-facing command and `coda` remains available for compatibility.
 Run `man coda` for the full manual. Tab completion is available for all subcommands.
 
 ### Global Flags

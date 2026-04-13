@@ -3,6 +3,11 @@
 # core.sh — coda entry point, session attach/ls/switch/serve/help
 #
 
+coda-dev() {
+    local -x SESSION_PREFIX="${CODA_DEV_SESSION_PREFIX:-coda-dev-}"
+    coda "$@"
+}
+
 coda() {
     local _coda_profile="" _coda_layout=""
     local args=()
@@ -55,9 +60,8 @@ _coda_attach() {
     local dir="${2:-$PWD}"
     local session="${SESSION_PREFIX}$(_coda_sanitize_session_name "$name")"
 
-    local layout="${CODA_LAYOUT:-$DEFAULT_LAYOUT}"
-    local nvim_appname="${CODA_NVIM_APPNAME:-$DEFAULT_NVIM_APPNAME}"
     local profile="${CODA_PROFILE:-}"
+    local flag_layout="${CODA_LAYOUT:-}"
 
     if [ -n "$profile" ]; then
         local profile_file
@@ -67,10 +71,15 @@ _coda_attach() {
             echo "Available: $(_coda_list_profiles | tr '\n' ' ')"
             return 1
         fi
-        set -a; source "$profile_file"; set +a
-        layout="${CODA_LAYOUT:-$layout}"
-        nvim_appname="${CODA_NVIM_APPNAME:-$nvim_appname}"
     fi
+
+    local project_root=""
+    project_root=$(_coda_find_project_root_from "$dir")
+
+    local config_lines layout nvim_appname
+    config_lines=$(_coda_resolve_effective_config "$project_root" "$profile" "$flag_layout")
+    layout=$(printf '%s' "$config_lines" | sed -n '1p')
+    nvim_appname=$(printf '%s' "$config_lines" | sed -n '2p')
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
         _coda_load_layout "$layout" || return 1
@@ -85,6 +94,10 @@ _coda_attach() {
         fi
 
         tmux set-environment -t "$session" CODA_DIR "$dir"
+
+        CODA_SESSION_NAME="$session" CODA_SESSION_DIR="$dir" \
+        CODA_SESSION_LAYOUT="$layout" \
+            _coda_run_hooks post-session-create
     fi
 
     if [ -n "${TMUX:-}" ]; then

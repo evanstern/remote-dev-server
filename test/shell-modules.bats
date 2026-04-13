@@ -306,3 +306,164 @@ setup() {
     [ -n "$DEFAULT_BRANCH" ]
     [ -n "$DEFAULT_LAYOUT" ]
 }
+
+# --- Config precedence tests ---
+
+@test "_coda_resolve_effective_config returns defaults with no overrides" {
+    unset CODA_LAYOUT CODA_NVIM_APPNAME
+    result=$(_coda_resolve_effective_config "" "" "")
+    layout=$(echo "$result" | sed -n '1p')
+    nvim=$(echo "$result" | sed -n '2p')
+    [ "$layout" = "$DEFAULT_LAYOUT" ]
+    [ "$nvim" = "$DEFAULT_NVIM_APPNAME" ]
+}
+
+@test "_coda_resolve_effective_config respects project config" {
+    unset CODA_LAYOUT CODA_NVIM_APPNAME
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    printf 'CODA_LAYOUT=project-layout\nCODA_NVIM_APPNAME=project-nvim\n' > "$tmpdir/.coda.env"
+    result=$(_coda_resolve_effective_config "$tmpdir" "" "")
+    layout=$(echo "$result" | sed -n '1p')
+    nvim=$(echo "$result" | sed -n '2p')
+    [ "$layout" = "project-layout" ]
+    [ "$nvim" = "project-nvim" ]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_resolve_effective_config profile overrides project" {
+    unset CODA_LAYOUT CODA_NVIM_APPNAME
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    printf 'CODA_LAYOUT=project-layout\n' > "$tmpdir/.coda.env"
+    mkdir -p "$CODA_PROFILES_DIR"
+    printf 'CODA_LAYOUT=profile-layout\n' > "$CODA_PROFILES_DIR/test-precedence.env"
+    result=$(_coda_resolve_effective_config "$tmpdir" "test-precedence" "")
+    layout=$(echo "$result" | sed -n '1p')
+    [ "$layout" = "profile-layout" ]
+    rm -rf "$tmpdir" "$CODA_PROFILES_DIR/test-precedence.env"
+}
+
+@test "_coda_resolve_effective_config env var overrides profile" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$CODA_PROFILES_DIR"
+    printf 'CODA_LAYOUT=profile-layout\n' > "$CODA_PROFILES_DIR/test-env.env"
+    CODA_LAYOUT=env-layout
+    result=$(_coda_resolve_effective_config "$tmpdir" "test-env" "")
+    layout=$(echo "$result" | sed -n '1p')
+    [ "$layout" = "env-layout" ]
+    unset CODA_LAYOUT
+    rm -rf "$tmpdir" "$CODA_PROFILES_DIR/test-env.env"
+}
+
+@test "_coda_resolve_effective_config flag overrides everything" {
+    CODA_LAYOUT=env-layout
+    result=$(_coda_resolve_effective_config "" "" "flag-layout")
+    layout=$(echo "$result" | sed -n '1p')
+    [ "$layout" = "flag-layout" ]
+    unset CODA_LAYOUT
+}
+
+@test "_coda_find_project_root_from finds bare repo root" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.bare"
+    echo 'gitdir: ./.bare' > "$tmpdir/.git"
+    mkdir -p "$tmpdir/main/src"
+    result=$(_coda_find_project_root_from "$tmpdir/main/src")
+    [ "$result" = "$tmpdir" ]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_find_project_root_from returns empty for non-project" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    result=$(_coda_find_project_root_from "$tmpdir")
+    [ -z "$result" ]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_load_project_config sources .coda.env" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    printf 'CODA_TEST_VAR=hello_from_project\n' > "$tmpdir/.coda.env"
+    _coda_load_project_config "$tmpdir"
+    [ "$CODA_TEST_VAR" = "hello_from_project" ]
+    unset CODA_TEST_VAR
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_load_project_config is no-op without .coda.env" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    run _coda_load_project_config "$tmpdir"
+    [ "$status" -eq 0 ]
+    rm -rf "$tmpdir"
+}
+
+@test "coda-dev function is defined" {
+    declare -f coda-dev &>/dev/null
+}
+
+# --- Hook system tests ---
+
+@test "_coda_run_hooks is defined" {
+    declare -f _coda_run_hooks &>/dev/null
+}
+
+@test "_coda_run_hooks is no-op for missing event directory" {
+    run _coda_run_hooks nonexistent-event
+    [ "$status" -eq 0 ]
+}
+
+@test "_coda_run_hooks runs executable scripts" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "hook-ran"\n' > "$tmpdir/test-event/01-test"
+    chmod +x "$tmpdir/test-event/01-test"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hook-ran"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks skips non-executable files" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "should-not-run"\n' > "$tmpdir/test-event/01-noexec"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"should-not-run"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks passes env vars to hooks" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\necho "name=$CODA_PROJECT_NAME"\n' > "$tmpdir/test-event/01-env"
+    chmod +x "$tmpdir/test-event/01-env"
+    CODA_HOOKS_DIR="$tmpdir" CODA_PROJECT_NAME="testproj" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"name=testproj"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "_coda_run_hooks reports failing hooks without blocking" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/test-event"
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$tmpdir/test-event/01-fail"
+    chmod +x "$tmpdir/test-event/01-fail"
+    CODA_HOOKS_DIR="$tmpdir" run _coda_run_hooks test-event
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hook warning"* ]]
+    rm -rf "$tmpdir"
+}
+
+@test "built-in post-project-create hook exists and is executable" {
+    [ -x "$_CODA_DIR/hooks/post-project-create/00-editorconfig" ]
+}

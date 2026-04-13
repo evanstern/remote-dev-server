@@ -1,4 +1,4 @@
-#compdef coda
+#compdef coda coda-dev
 # zsh completion for coda
 # Sourced automatically by install.sh via ~/.zshrc
 #
