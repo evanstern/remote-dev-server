@@ -474,11 +474,12 @@ if [ -f "$HOME/.zshrc" ]; then
     else
         FPATH_LINE="fpath=($STABLE_DIR/completions \$fpath)"
     fi
-    COMPINIT_LINE="autoload -Uz compinit && compinit"
     sed -i '/# coda tab completion/d' "$HOME/.zshrc"
     sed -i '\|completions/coda|d' "$HOME/.zshrc"
-    sed -i '/autoload -Uz compinit && compinit/d' "$HOME/.zshrc"
-    printf '\n# coda tab completion\n%s\n%s\n' "$FPATH_LINE" "$COMPINIT_LINE" >> "$HOME/.zshrc"
+    printf '\n# coda tab completion\n%s\n' "$FPATH_LINE" >> "$HOME/.zshrc"
+    if ! grep -Eq '(^|[[:space:];&|])compinit([[:space:];&|]|$)' "$HOME/.zshrc"; then
+        printf 'autoload -Uz compinit && compinit\n' >> "$HOME/.zshrc"
+    fi
     ok "Zsh completion updated in ~/.zshrc"
 fi
 

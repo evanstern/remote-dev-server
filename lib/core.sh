@@ -4,7 +4,7 @@
 #
 
 coda-dev() {
-    local SESSION_PREFIX="${CODA_DEV_SESSION_PREFIX:-coda-dev-}"
+    local -x SESSION_PREFIX="${CODA_DEV_SESSION_PREFIX:-coda-dev-}"
     coda "$@"
 }
 
