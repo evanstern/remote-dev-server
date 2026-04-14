@@ -10,13 +10,11 @@ const z = require("zod");
 const execFileAsync = promisify(execFile);
 
 const CODA_DIR = process.env.CODA_DIR || path.resolve(__dirname, "..");
-const SHELL = process.env.SHELL || "/bin/bash";
+const SHELL = "/bin/bash";
 
 async function runCoda(args, { cwd, timeout = 15000 } = {}) {
   const script = [
-    `export CODA_SKIP_ENV=false`,
     `source "${CODA_DIR}/shell-functions.sh"`,
-    `AUTO_ATTACH_TMUX=false`,
     `coda ${args.map(shellEscape).join(" ")}`,
   ].join("\n");
 
