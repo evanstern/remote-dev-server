@@ -369,18 +369,18 @@ step "[12/13] coda-core binary"
 
 _coda_core_stale=false
 _coda_core_installed="$HOME/.local/bin/coda-core"
+mkdir -p "$(dirname "$_coda_core_installed")"
 if [ ! -f "$_coda_core_installed" ]; then
-    # No installed binary at all
     _coda_core_stale=true
-elif [ ! -f "$SCRIPT_DIR/coda-core" ]; then
-    # No local build artifact — need to rebuild
-    _coda_core_stale=true
-else
+elif [ -f "$SCRIPT_DIR/coda-core" ]; then
     for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
         [ -f "$_gofile" ] && [ "$_gofile" -nt "$SCRIPT_DIR/coda-core" ] && _coda_core_stale=true
     done
-    # Also stale if local build is newer than installed copy
     [ "$SCRIPT_DIR/coda-core" -nt "$_coda_core_installed" ] && _coda_core_stale=true
+else
+    for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
+        [ -f "$_gofile" ] && [ "$_gofile" -nt "$_coda_core_installed" ] && _coda_core_stale=true
+    done
 fi
 if [ "$_coda_core_stale" = "false" ]; then
     ok "coda-core — up to date"
