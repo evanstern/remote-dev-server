@@ -50,11 +50,16 @@ _coda_semver_satisfies() {
     for part in $constraint; do
         if [[ "$part" == ^* ]]; then
             local base="${part#^}"
-            local base_major
-            read -r base_major _ _ <<< "$(_coda_semver_parse "$base")"
-            local next_major=$((base_major + 1)).0.0
+            local base_major base_minor_c
+            read -r base_major base_minor_c _ <<< "$(_coda_semver_parse "$base")"
+            local ceiling
+            if (( base_major == 0 )); then
+                ceiling="0.$((base_minor_c + 1)).0"
+            else
+                ceiling="$((base_major + 1)).0.0"
+            fi
             [[ $(_coda_semver_compare "$version" "$base") -ge 0 ]] || return 1
-            [[ $(_coda_semver_compare "$version" "$next_major") -lt 0 ]] || return 1
+            [[ $(_coda_semver_compare "$version" "$ceiling") -lt 0 ]] || return 1
         elif [[ "$part" == ~* ]]; then
             local base="${part#\~}"
             local base_major base_minor
@@ -337,14 +342,13 @@ _coda_plugin_install() {
             fi
         fi
         _coda_plugin_install_deps "$plugin_dir"
-    fi
 
-    # Run custom install script
-    local install_script
-    install_script=$(jq -r '.install // empty' "$manifest" 2>/dev/null)
-    if [ -n "$install_script" ] && [ -f "$plugin_dir/$install_script" ]; then
-        echo "Running install script: $install_script"
-        (cd "$plugin_dir" && bash "$install_script")
+        local install_script
+        install_script=$(jq -r '.install // empty' "$manifest" 2>/dev/null)
+        if [ -n "$install_script" ] && [ -f "$plugin_dir/$install_script" ]; then
+            echo "Running install script: $install_script"
+            (cd "$plugin_dir" && bash "$install_script")
+        fi
     fi
 
     # Add to config if not already there

@@ -1093,6 +1093,11 @@ setup() {
     _coda_semver_satisfies "0.1.5" "^0.1.0"
 }
 
+@test "_coda_semver_satisfies caret 0.x rejects next minor" {
+    run _coda_semver_satisfies "0.2.0" "^0.1.0"
+    [ "$status" -ne 0 ]
+}
+
 @test "_coda_semver_satisfies caret 0.x rejects next major" {
     run _coda_semver_satisfies "1.0.0" "^0.1.0"
     [ "$status" -ne 0 ]

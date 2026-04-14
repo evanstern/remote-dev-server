@@ -185,7 +185,7 @@ _coda_run_hooks() {
         done < <(printf '%s\n' "$dir"/* | LC_ALL=C sort)
     done
 
-    # Plugin hooks
+    local _plugin_hooks_sorted=()
     local key
     for key in "${!_CODA_PLUGIN_HOOKS[@]}"; do
         local key_event="${key%%:*}"
@@ -195,14 +195,17 @@ _coda_run_hooks() {
         for pattern in "${patterns[@]}"; do
             local hook
             for hook in $pattern; do
-                [ -f "$hook" ] && [ -x "$hook" ] || continue
-                found=1
-                if ! "$hook" "$@" 2>&1; then
-                    echo "  hook warning: $(basename "$hook") exited non-zero" >&2
-                fi
+                [ -f "$hook" ] && [ -x "$hook" ] && _plugin_hooks_sorted+=("$hook")
             done
         done
     done
+    while IFS= read -r hook; do
+        [ -z "$hook" ] && continue
+        found=1
+        if ! "$hook" "$@" 2>&1; then
+            echo "  hook warning: $(basename "$hook") exited non-zero" >&2
+        fi
+    done < <(printf '%s\n' "${_plugin_hooks_sorted[@]}" | LC_ALL=C sort)
 
     return 0
 }

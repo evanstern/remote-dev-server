@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
 #
-# default.sh u2014 tmux layout: opencode (top 80%) + shell (bottom 20%)
+# default.sh -- tmux layout: opencode (top 80%) + shell (bottom 20%)
 #
-# Called by _coda_attach / coda layout apply with:
 #   $1 = session name
 #   $2 = working directory
 #   $3 = NVIM_APPNAME (unused in this layout)
 #
-# Layout:
-#   u250cu2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2510
-#   u2502                                       u2502
-#   u2502              opencode                 u2502
-#   u2502              (80%)                    u2502
-#   u2502                                       u2502
-#   u251cu2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2524
-#   u2502              shell (20%)              u2502
-#   u2514u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2518
+#   +--------------------------------------+
+#   |                                      |
+#   |            opencode (80%)            |
+#   |                                      |
+#   +--------------------------------------+
+#   |            shell (20%)               |
+#   +--------------------------------------+
 
 _layout_init() {
     local session="$1" dir="$2"

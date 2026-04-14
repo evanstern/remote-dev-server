@@ -304,9 +304,13 @@ function loadPluginTools() {
     if (!mcpTools || typeof mcpTools !== "object") continue;
 
     for (const [toolName, toolDef] of Object.entries(mcpTools)) {
+      if (!Array.isArray(toolDef.command) || toolDef.command.length === 0) {
+        console.error(`Plugin ${name}: skipping tool ${toolName} (invalid command)`);
+        continue;
+      }
       const schema = buildZodSchema(toolDef.params);
       const handler = buildHandler(toolDef.command, toolDef.params);
-      server.tool(toolName, toolDef.description, schema, handler);
+      server.tool(toolName, toolDef.description || toolName, schema, handler);
     }
   }
 }

@@ -126,7 +126,7 @@ standard semver range syntax:
 
 | Syntax | Meaning |
 |--------|--------|
-| `^0.1.0` | `>=0.1.0 <1.0.0` (compatible with 0.x) |
+| `^0.1.0` | `>=0.1.0 <0.2.0` (same minor for 0.x) |
 | `^1.2.0` | `>=1.2.0 <2.0.0` (same major) |
 | `~1.2.0` | `>=1.2.0 <1.3.0` (same minor) |
 | `>= 1.0.0 < 2.0.0` | Explicit range |

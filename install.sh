@@ -31,19 +31,7 @@ EOF
     exit 0
 }
 
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --projects-dir)  PROJECTS_DIR="$2"; shift 2 ;;
-        --projects-dir=*) PROJECTS_DIR="${1#*=}"; shift ;;
-        --skip-go)       SKIP_GO=true; shift ;;
-        --skip-mcp)      SKIP_MCP=true; shift ;;
-        --skip-man)      SKIP_MAN=true; shift ;;
-        --help|-h)       usage ;;
-        *) echo "Unknown option: $1"; usage ;;
-    esac
-done
-
-# --- Load .env (CLI options above take precedence) ---
+# --- Load .env first, then CLI overrides take precedence ---
 
 if [ ! -f "$SCRIPT_DIR/.env" ] && [ -f "$SCRIPT_DIR/.env.example" ]; then
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
@@ -59,6 +47,18 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
 SKIP_GO="${SKIP_GO:-false}"
 SKIP_MCP="${SKIP_MCP:-false}"
 SKIP_MAN="${SKIP_MAN:-false}"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --projects-dir)  PROJECTS_DIR="$2"; shift 2 ;;
+        --projects-dir=*) PROJECTS_DIR="${1#*=}"; shift ;;
+        --skip-go)       SKIP_GO=true; shift ;;
+        --skip-mcp)      SKIP_MCP=true; shift ;;
+        --skip-man)      SKIP_MAN=true; shift ;;
+        --help|-h)       usage ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
 
 # --- Helpers ---
 
