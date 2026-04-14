@@ -76,6 +76,7 @@ _coda() {
                 'profile:manage config profiles'
                 'watch:monitor sessions for attention signals'
                 'provider:manage provider status'
+                'github:post comments as Coda bot identity'
                 'help:show usage'
             )
             # Add existing sessions as completions
@@ -108,6 +109,9 @@ _coda() {
                     ;;
                 provider)
                     _coda_provider_args
+                    ;;
+                github)
+                    _coda_github_args
                     ;;
                 serve)
                     local base="${OPENCODE_BASE_PORT:-4096}"
@@ -330,6 +334,25 @@ _coda_provider_args() {
                 'status:show provider status'
             )
             _describe 'provider subcommand' subcmds
+            ;;
+    esac
+}
+
+_coda_github_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'token:print a GitHub App installation access token'
+                'comment:post a comment as Coda bot'
+                'status:check GitHub App configuration'
+            )
+            _describe 'github subcommand' subcmds
             ;;
     esac
 }

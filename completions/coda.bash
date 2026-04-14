@@ -63,7 +63,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="attach ls switch serve auth project feature layout profile watch provider help"
+    local top_subcommands="attach ls switch serve auth project feature layout profile watch provider github help"
 
     # Word positions:
     #   words[0] = coda
@@ -132,6 +132,9 @@ _coda_complete() {
                     ;;
                 provider)
                     COMPREPLY=($(compgen -W "status" -- "$cur"))
+                    ;;
+                github)
+                    COMPREPLY=($(compgen -W "token comment status" -- "$cur"))
                     ;;
                 attach)
                     local sessions
