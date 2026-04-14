@@ -588,6 +588,36 @@ coda --profile dev feature start auth
 
 ---
 
+### `coda github`
+
+Post GitHub comments as the Coda bot identity. Uses a GitHub App so comments
+appear as **Coda [bot]** instead of the human user.
+
+```bash
+coda github token                              # print an installation access token
+coda github comment --issue 42 --body "Done"   # comment on issue/PR #42
+coda github comment --issue 42                 # reads body from stdin
+coda github comment --issue 42 --repo user/repo  # explicit repo
+coda github status                             # check config and test token
+```
+
+The `--repo` flag is optional — it auto-detects from the git remote. The
+comment body can be passed via `--body` or piped through stdin.
+
+Requires three config values in `.env`:
+
+| Variable | Description |
+|---|---|
+| `CODA_GITHUB_CLIENT_ID` | GitHub App Client ID (JWT issuer) |
+| `CODA_GITHUB_INSTALLATION_ID` | Installation ID for the target account |
+| `CODA_GITHUB_PRIVATE_KEY_PATH` | Path to the App's private key PEM file |
+
+See **Configuration** below for defaults. The private key file should be
+downloaded from your GitHub App settings and stored at the configured path
+with `chmod 600`.
+
+---
+
 ### `coda help`
 
 Print a short usage summary. Full manual: `man coda`.
@@ -600,7 +630,7 @@ Installed automatically by `install.sh` for both bash and zsh.
 
 ```
 coda <TAB>                     → attach ls switch serve auth project feature
-                                 layout profile watch provider help [active sessions]
+                                 layout profile watch provider github help [active sessions]
 coda attach <TAB>              → [active sessions]
 coda feature <TAB>             → start done finish ls
 coda feature start <TAB>       → [local git branches]
@@ -616,6 +646,7 @@ coda profile <TAB>             → ls create show
 coda profile show <TAB>        → [available profiles]
 coda watch <TAB>               → start stop status
 coda provider <TAB>            → status
+coda github <TAB>              → token comment status
 coda serve <TAB>               → [port numbers]
 coda switch                    → (no completion needed — interactive fzf)
 coda --profile <TAB>           → [available profiles]
@@ -690,6 +721,9 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `CODA_WATCH_COOLDOWN` | `60` | Min seconds between repeat notifications per pane |
 | `AUTO_ATTACH_TMUX` | `true` | Auto-attach to tmux on SSH login |
 | `DEFAULT_TMUX_SESSION` | `default` | Session name for auto-attach |
+| `CODA_GITHUB_CLIENT_ID` | empty | GitHub App Client ID (used as JWT issuer) |
+| `CODA_GITHUB_INSTALLATION_ID` | empty | GitHub App Installation ID |
+| `CODA_GITHUB_PRIVATE_KEY_PATH` | `~/.config/coda/github-app-private-key.pem` | Path to the GitHub App private key PEM file |
 
 ---
 
