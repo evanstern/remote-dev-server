@@ -14,28 +14,43 @@ import (
 
 func runProvider(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: coda-core provider <auth|status>")
+		return fmt.Errorf("usage: coda-core provider <auth|status|fallback-models>")
 	}
 	switch args[0] {
 	case "auth":
 		return runProviderAuth(args[1:])
 	case "status":
 		return runProviderStatus(args[1:])
+	case "fallback-models":
+		return runProviderFallbackModels()
 	default:
 		return fmt.Errorf("unknown provider subcommand: %s", args[0])
 	}
+}
+
+func runProviderFallbackModels() error {
+	models := fallbackModels()
+	data, err := json.MarshalIndent(models, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func runProviderAuth(args []string) error {
 	fs := flag.NewFlagSet("provider-auth", flag.ExitOnError)
 	baseURL := fs.String("base-url", "", "CLIProxyAPI base URL")
 	configPath := fs.String("config", "", "OpenCode config file path")
-	apiKey := fs.String("api-key", "", "Optional API key")
+	apiKey := fs.String("api-key", "", "Optional API key (prefer CODA_API_KEY env var)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *baseURL == "" || *configPath == "" {
 		return fmt.Errorf("--base-url and --config are required")
+	}
+	if *apiKey == "" {
+		*apiKey = os.Getenv("CODA_API_KEY")
 	}
 
 	modelsJSON, err := discoverModels(*baseURL, *apiKey)
@@ -61,10 +76,13 @@ func runProviderStatus(args []string) error {
 	configPath := fs.String("config", "", "OpenCode config file path")
 	baseURL := fs.String("base-url", "", "CLIProxyAPI base URL")
 	healthURL := fs.String("health-url", "", "Optional health URL")
-	apiKey := fs.String("api-key", "", "Optional API key")
+	apiKey := fs.String("api-key", "", "Optional API key (prefer CODA_API_KEY env var)")
 	hasOpencode := fs.String("has-opencode", "false", "Whether opencode is installed")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *apiKey == "" {
+		*apiKey = os.Getenv("CODA_API_KEY")
 	}
 
 	fmt.Printf("Provider mode: %s\n", *mode)
