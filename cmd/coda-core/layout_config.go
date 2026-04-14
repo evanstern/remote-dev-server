@@ -3,10 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+var envKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type LayoutConfig struct {
 	Direction string        `yaml:"direction"`
@@ -82,6 +86,9 @@ func validatePaneConfig(p *PaneConfig, path string) error {
 		if p.Command != "" && len(p.Prefer) > 0 {
 			return fmt.Errorf("%s: cannot specify both 'command' and 'prefer'", path)
 		}
+		if p.Direction != "" {
+			return fmt.Errorf("%s: leaf pane cannot have 'direction' without 'panes'", path)
+		}
 	} else {
 		if p.Command != "" || len(p.Prefer) > 0 {
 			return fmt.Errorf("%s: split pane cannot have 'command' or 'prefer'", path)
@@ -100,8 +107,16 @@ func validatePaneConfig(p *PaneConfig, path string) error {
 	}
 
 	if p.Size != "" {
-		if err := validateSize(p.Size); err != nil {
+		normalized, err := validateSize(p.Size)
+		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
+		}
+		p.Size = normalized
+	}
+
+	for k := range p.Env {
+		if !envKeyRe.MatchString(k) {
+			return fmt.Errorf("%s: invalid env key %q (must match [A-Za-z_][A-Za-z0-9_]*)", path, k)
 		}
 	}
 
@@ -121,28 +136,28 @@ func normalizeDirection(d string) string {
 	}
 }
 
-func validateSize(s string) error {
+func validateSize(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return nil
+		return s, nil
 	}
 	if strings.HasSuffix(s, "%") {
 		numStr := strings.TrimSuffix(s, "%")
-		var pct int
-		if _, err := fmt.Sscanf(numStr, "%d", &pct); err != nil {
-			return fmt.Errorf("invalid percentage size %q", s)
+		pct, err := strconv.Atoi(numStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid percentage size %q", s)
 		}
 		if pct < 1 || pct > 99 {
-			return fmt.Errorf("percentage size must be between 1%% and 99%% (got %q)", s)
+			return "", fmt.Errorf("percentage size must be between 1%% and 99%% (got %q)", s)
 		}
-		return nil
+		return fmt.Sprintf("%d%%", pct), nil
 	}
-	var cells int
-	if _, err := fmt.Sscanf(s, "%d", &cells); err != nil {
-		return fmt.Errorf("invalid size %q (use percentage like '80%%' or cell count like '20')", s)
+	cells, err := strconv.Atoi(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid size %q (use percentage like '80%%' or cell count like '20')", s)
 	}
 	if cells < 1 {
-		return fmt.Errorf("cell size must be positive (got %q)", s)
+		return "", fmt.Errorf("cell size must be positive (got %q)", s)
 	}
-	return nil
+	return strconv.Itoa(cells), nil
 }

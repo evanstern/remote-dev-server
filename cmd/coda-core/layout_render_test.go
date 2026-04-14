@@ -141,13 +141,13 @@ func TestRenderLayoutBash_PreferCommands(t *testing.T) {
 	if !strings.Contains(out, "_prefer_0()") {
 		t.Error("missing prefer function")
 	}
-	if !strings.Contains(out, "command -v yazi") {
+	if !strings.Contains(out, "command -v -- 'yazi'") {
 		t.Error("missing yazi check")
 	}
-	if !strings.Contains(out, "command -v nnn") {
+	if !strings.Contains(out, "command -v -- 'nnn'") {
 		t.Error("missing nnn check")
 	}
-	if !strings.Contains(out, "command -v lf") {
+	if !strings.Contains(out, "command -v -- 'lf'") {
 		t.Error("missing lf check")
 	}
 }

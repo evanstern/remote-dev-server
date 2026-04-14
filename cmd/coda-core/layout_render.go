@@ -144,7 +144,7 @@ func (rc *renderCtx) writePreferBlock(b *strings.Builder, indent string) {
 			if cmd == "$SHELL" || cmd == "\"$SHELL\"" {
 				b.WriteString(fmt.Sprintf("%s    printf '%%s' \"%s\"\n", indent, cmd))
 			} else {
-				b.WriteString(fmt.Sprintf("%s    command -v %s &>/dev/null && { printf '%%s' '%s'; return; }\n", indent, shellFirstWord(cmd), shellEscapeSingle(cmd)))
+				b.WriteString(fmt.Sprintf("%s    command -v -- '%s' &>/dev/null && { printf '%%s' '%s'; return; }\n", indent, shellEscapeSingle(shellFirstWord(cmd)), shellEscapeSingle(cmd)))
 			}
 		}
 		b.WriteString(fmt.Sprintf("%s    printf '%%s' \"$SHELL\"\n", indent))
@@ -186,7 +186,7 @@ func (rc *renderCtx) writeInitFunc(b *strings.Builder) {
 		writeBorderSetup(b, rc.cfg.Border, "    ", "\"$session\"")
 	}
 
-	b.WriteString("    tmux select-pane -t \"$session\" -t 0\n")
+	b.WriteString("    tmux select-pane -t \"$session\":0\n")
 	b.WriteString("}\n")
 }
 
@@ -371,8 +371,8 @@ func writeBorderSetup(b *strings.Builder, border *BorderConfig, indent, target s
 		targetArg = fmt.Sprintf(" -t %s", target)
 	}
 
-	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-status %s\n", indent, targetArg, status))
-	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-lines %s\n", indent, targetArg, lines))
+	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-status '%s'\n", indent, targetArg, shellEscapeSingle(status)))
+	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-lines '%s'\n", indent, targetArg, shellEscapeSingle(lines)))
 	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-style '%s'\n", indent, targetArg, shellEscapeSingle(style)))
 	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-active-border-style '%s'\n", indent, targetArg, shellEscapeSingle(activeStyle)))
 	b.WriteString(fmt.Sprintf("%stmux set-option%s pane-border-format '%s'\n", indent, targetArg, shellEscapeSingle(borderFormat)))
