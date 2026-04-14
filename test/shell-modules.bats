@@ -981,10 +981,10 @@ setup() {
     rm -rf "$tmpdir"
 }
 
-@test "_coda_plugin_dispatch returns 1 for unknown command" {
+@test "_coda_plugin_dispatch returns 127 for unknown command" {
     _CODA_PLUGIN_COMMANDS=()
     run _coda_plugin_dispatch nonexistent-plugin-cmd
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 127 ]
 }
 
 @test "_coda_plugin_name_from_url extracts name from SSH URL" {
@@ -1087,6 +1087,10 @@ setup() {
 @test "_coda_semver_satisfies range rejects below" {
     run _coda_semver_satisfies "0.9.0" ">= 1.0.0 < 2.0.0"
     [ "$status" -ne 0 ]
+}
+
+@test "_coda_semver_satisfies spaceless range" {
+    _coda_semver_satisfies "1.5.0" ">=1.0.0 <2.0.0"
 }
 
 @test "_coda_semver_satisfies caret 0.x allows same minor" {

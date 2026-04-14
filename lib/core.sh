@@ -57,7 +57,8 @@ coda() {
         version|--version|-V)  echo "coda $CODA_VERSION"; status=$? ;;
         help|--help|-h)   _coda_help; status=$? ;;
         "")               _coda_attach; status=$? ;;
-        *)  if _coda_plugin_dispatch "$subcmd" "${args[@]:1}"; then
+        *)  if _coda_plugin_has_command "$subcmd"; then
+                _coda_plugin_dispatch "$subcmd" "${args[@]:1}"
                 status=$?
             else
                 _coda_attach "${args[0]#"$SESSION_PREFIX"}" "${args[@]:1}"

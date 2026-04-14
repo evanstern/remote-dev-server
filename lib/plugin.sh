@@ -46,6 +46,8 @@ _coda_semver_satisfies() {
     local version="$1" constraint="$2"
     [ -z "$constraint" ] && return 0
 
+    constraint=$(echo "$constraint" | sed -E 's/(>=|<=|>|<)([0-9])/\1 \2/g')
+
     local part prev_op=""
     for part in $constraint; do
         if [[ "$part" == ^* ]]; then
@@ -87,7 +89,7 @@ _coda_semver_satisfies() {
 }
 
 _coda_plugin_config_path() {
-    echo "${HOME}/.config/coda/config.json"
+    echo "${CODA_CONFIG_PATH:-${HOME}/.config/coda/config.json}"
 }
 
 _coda_plugin_load_all() {
@@ -187,7 +189,14 @@ _coda_plugin_load() {
     hooks=$(jq -r '.provides.hooks // {} | to_entries[] | "\(.key)\t\(.value | if type == "array" then join("|") else . end)"' "$manifest" 2>/dev/null)
     while IFS=$'\t' read -r event globs; do
         [ -z "$event" ] && continue
-        _CODA_PLUGIN_HOOKS["$event:$name"]="$dir/$globs"
+        local prefixed=""
+        local _hg
+        IFS='|' read -ra _hg_parts <<< "$globs"
+        for _hg in "${_hg_parts[@]}"; do
+            [ -n "$prefixed" ] && prefixed+="|"
+            prefixed+="$dir/$_hg"
+        done
+        _CODA_PLUGIN_HOOKS["$event:$name"]="$prefixed"
     done <<< "$hooks"
 
     # Register providers
@@ -217,12 +226,16 @@ _coda_plugin_name_from_url() {
     echo "$name"
 }
 
+_coda_plugin_has_command() {
+    [[ -n "${_CODA_PLUGIN_COMMANDS[$1]+x}" ]]
+}
+
 _coda_plugin_dispatch() {
     local subcmd="$1"
     shift
 
-    if [[ -z "${_CODA_PLUGIN_COMMANDS[$subcmd]+x}" ]]; then
-        return 1
+    if ! _coda_plugin_has_command "$subcmd"; then
+        return 127
     fi
 
     local entry="${_CODA_PLUGIN_COMMANDS[$subcmd]}"
