@@ -41,7 +41,8 @@ func printUsage() {
 Usage: coda-core <command> [args...]
 
 Commands:
-  layout snapshot    Capture current tmux layout as a reusable layout script
+  layout snapshot    Capture current tmux layout as a script or YAML config
+  layout render      Render a YAML layout config as bash functions
   provider auth      Configure CLIProxyAPI provider in OpenCode config
   provider status    Show provider diagnostics
   watch              Monitor OpenCode sessions and notify on attention needed
