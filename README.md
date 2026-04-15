@@ -545,6 +545,26 @@ notifications for the same pane.
 
 ---
 
+### `coda mcp`
+
+Manage the shared MCP server. The MCP server exposes all coda tools (plus plugin
+tools) to OpenCode agents over HTTP. It runs as a single persistent process
+shared by all sessions, instead of spawning one per session.
+
+```bash
+coda mcp                  # start the MCP server (runs in coda-mcp-server tmux session)
+coda mcp status           # check if running + health probe
+coda mcp stop             # stop the MCP server
+coda mcp restart          # restart (pick up plugin changes, etc.)
+```
+
+The server listens on `CODA_MCP_PORT` (default: 3111) and is configured as a
+remote MCP server in OpenCode's config (`~/.config/opencode/opencode.json`).
+Plugin tools declared via `mcp_tools` in `plugin.json` are loaded at startup;
+restart the server to pick up new or changed plugins.
+
+---
+
 ### `coda layout [name]`
 
 Apply a tmux layout to the current session or manage layouts.
@@ -632,7 +652,8 @@ Installed automatically by `install.sh` for both bash and zsh.
 
 ```
 coda <TAB>                     → attach ls switch serve auth project feature
-                                 layout profile watch provider github help [active sessions]
+                                 layout profile hooks watch mcp provider github
+                                 plugin help [active sessions]
 coda attach <TAB>              → [active sessions]
 coda feature <TAB>             → start done finish ls
 coda feature start <TAB>       → [local git branches]
@@ -647,6 +668,7 @@ coda layout apply <TAB>        → [available layouts]
 coda profile <TAB>             → ls create show
 coda profile show <TAB>        → [available profiles]
 coda watch <TAB>               → start stop status
+coda mcp <TAB>                 → start stop status restart
 coda provider <TAB>            → status
 coda github <TAB>              → token comment status
 coda serve <TAB>               → [port numbers]
@@ -724,6 +746,7 @@ All behaviour is controlled by `.env` in the repo directory. Created from
 | `CODA_NOTIFICATIONS_DIR` | `~/.config/coda/notifications` | User notification plugins directory |
 | `CLAUDE_CREDENTIALS_PATH` | `~/.claude/.credentials.json` | Path to Claude credentials file |
 | `NEW_PROJECT_GITHUB_OWNER` | empty | GitHub user/org for `coda project start --new` (required) |
+| `CODA_MCP_PORT` | `3111` | Port for the shared MCP server |
 | `CODA_WATCH_INTERVAL` | `5` | Watcher poll interval (seconds) |
 | `CODA_WATCH_COOLDOWN` | `60` | Min seconds between repeat notifications per pane |
 | `AUTO_ATTACH_TMUX` | `true` | Auto-attach to tmux on SSH login |
@@ -805,6 +828,9 @@ coda/
 |   |-- four-pane.sh        opencode + nvim + lazygit + yazi
 |   |-- three-pane.sh       opencode + nvim + shell
 |   \-- wide-twopane.sh     opencode (left) + nvim (right)
+|-- mcp-server/
+|   |-- server.js           Shared MCP server (HTTP, port 3111)
+|   \-- package.json
 |-- man/
 |   \-- coda.1              Man page (installed to /usr/local/share/man/man1/)
 |-- scripts/

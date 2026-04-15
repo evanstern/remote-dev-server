@@ -151,9 +151,10 @@ lib/
   profile.sh                Profile management (ls/create/show)
   hooks.sh                  Lifecycle hook runner
   watch.sh                  Session watcher (start/stop/status)
+  mcp.sh                    Shared MCP server management (start/stop/status/restart)
 hooks/                      Built-in lifecycle hook scripts (post-project-create, etc.)
 cmd/coda-core/              Go companion binary (layout snapshot, provider, watcher)
-mcp-server/                 MCP server exposing coda tools to OpenCode agents
+mcp-server/                 Shared MCP server (HTTP on port 3111, serves all sessions)
 tests/                      Shell lifecycle regression tests (bash, mock tmux/fzf)
 test/                       Bats integration tests (module loading, functional)
 layouts/                    Built-in tmux layout scripts
@@ -161,13 +162,18 @@ layouts/                    Built-in tmux layout scripts
 
 ## MCP Server Contract
 
-`mcp-server/server.js` wraps the coda shell functions as structured MCP tools
-for OpenCode agents. It sources `shell-functions.sh` and invokes `coda` with
-the appropriate subcommands.
+The MCP server (`mcp-server/server.js`) runs as a single shared HTTP process
+(StreamableHTTP on `CODA_MCP_PORT`, default 3111) rather than being spawned
+per-session. All OpenCode sessions connect to it via `"type": "remote"` in
+`~/.config/opencode/opencode.json`. Manage it with `coda mcp start|stop|status|restart`.
+
+The server wraps coda shell functions as structured MCP tools. It sources
+`shell-functions.sh` and invokes `coda` with the appropriate subcommands.
+Pass `--stdio` to fall back to the old per-session stdio mode.
 
 When you change the contract of any coda subcommand (rename, add/remove
 arguments, change behavior), you must update the corresponding tool definition
-in the MCP server to match. The mapping is 1:1:
+in the MCP server to match. The core tool mapping is:
 
 | Shell command | MCP tool |
 |---|---|
@@ -181,17 +187,16 @@ in the MCP server to match. The mapping is 1:1:
 | `coda feature start` | `coda_feature_start` |
 | `coda feature done` | `coda_feature_done` |
 | `coda feature finish` | `coda_feature_finish` |
-| `coda watch status` | `coda_watch_status` |
-| `coda watch start` | `coda_watch_start` |
-| `coda watch stop` | `coda_watch_stop` |
-| `coda provider status` | `coda_provider_status` |
 | `coda layout ls` | `coda_layout_ls` |
 | `coda layout show` | `coda_layout_show` |
 | `coda help` | `coda_help` |
 
+Plugins can also register MCP tools via `provides.mcp_tools` in their
+`plugin.json`. These are loaded dynamically at server startup. Restart the
+MCP server (`coda mcp restart`) to pick up plugin changes.
+
 If you add a new subcommand, add a matching MCP tool. If you remove one, remove
-the tool. The MCP server is registered in `~/.config/opencode/opencode.json`
-under the `mcp.coda` key.
+the tool.
 
 ## Rewrite Branch Guidance
 
