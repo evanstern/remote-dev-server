@@ -50,7 +50,11 @@ _layout_init() {
     tmux new-session -d -s "$session" -x "$cols" -y "$rows" -c "$dir" \
         "$git_cmd; exec \$SHELL"
     tmux set-environment -t "$session" EDITOR nvim
-    tmux select-pane -t "$session" -T "Git"
+    # Use "$session:" (trailing colon) so tmux targets the new session's
+    # active pane instead of resolving against the caller's context.
+    # Without it, pane-base-index 1 causes "can't find pane: 0" when
+    # called from inside an existing tmux session (e.g. via the MCP server).
+    tmux select-pane -t "$session:" -T "Git"
 
     local avail=$(( rows - 1 ))
     local bottom=$(( avail * 20 / 100 ))
@@ -58,15 +62,15 @@ _layout_init() {
     local right_area=$(( cols - git_w ))
     local opencode_w=$(( right_area / 2 ))
 
-    tmux split-window -v -t "$session" -c "$dir" -l "$bottom"
-    tmux select-pane -t "$session" -T "Shell"
-    tmux select-pane -t "$session" -U
-    tmux split-window -h -t "$session" -c "$dir" -l "$right_area" \
+    tmux split-window -v -t "$session:" -c "$dir" -l "$bottom"
+    tmux select-pane -t "$session:" -T "Shell"
+    tmux select-pane -t "$session:" -U
+    tmux split-window -h -t "$session:" -c "$dir" -l "$right_area" \
         "$explorer_cmd; exec \$SHELL"
-    tmux select-pane -t "$session" -T "Explorer"
-    tmux split-window -h -t "$session" -c "$dir" -l "$opencode_w" \
+    tmux select-pane -t "$session:" -T "Explorer"
+    tmux split-window -h -t "$session:" -c "$dir" -l "$opencode_w" \
         "opencode; exec \$SHELL"
-    tmux select-pane -t "$session" -T "OpenCode"
+    tmux select-pane -t "$session:" -T "OpenCode"
 
     tmux set-option -t "$session" pane-border-status top
     tmux set-option -t "$session" pane-border-lines heavy

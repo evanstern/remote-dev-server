@@ -63,15 +63,14 @@ _coda_hooks_ls() {
                 post-layout-apply)
     fi
 
-    local found=0
+    local found=0 event dir hook name key
     for event in "${events[@]}"; do
         for dir in "$CODA_HOOKS_DIR/$event" "$_CODA_DIR/hooks/$event"; do
             [ -d "$dir" ] || continue
             for hook in "$dir"/*; do
                 [ -f "$hook" ] || continue
-                local name
                 name=$(basename "$hook")
-                local key="$event|$name"
+                key="$event|$name"
                 case "$seen" in *"|$key|"*) continue ;; esac
                 seen="$seen|$key|"
 
@@ -172,10 +171,10 @@ _coda_run_hooks() {
 
     local -a hook_dirs=("$CODA_HOOKS_DIR/$event" "$_CODA_DIR/hooks/$event")
     local found=0
+    local dir hook
 
     for dir in "${hook_dirs[@]}"; do
         [ -d "$dir" ] || continue
-        local hook
         while IFS= read -r hook; do
             [ -f "$hook" ] && [ -x "$hook" ] || continue
             found=1

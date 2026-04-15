@@ -2,6 +2,14 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const {
   StdioServerTransport,
 } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const {
+  StreamableHTTPServerTransport,
+} = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
+const {
+  isInitializeRequest,
+} = require("@modelcontextprotocol/sdk/types.js");
+const { createServer } = require("http");
+const { randomUUID } = require("crypto");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const path = require("path");
@@ -271,6 +279,7 @@ function buildHandler(command, params) {
 }
 
 function loadPluginTools() {
+  const registeredTools = new Set();
   const configPath = process.env.CODA_CONFIG_PATH
     || path.join(process.env.HOME, ".config", "coda", "config.json");
   const pluginsDir = process.env.CODA_PLUGINS_DIR
@@ -308,9 +317,14 @@ function loadPluginTools() {
         console.error(`Plugin ${name}: skipping tool ${toolName} (invalid command)`);
         continue;
       }
+      if (registeredTools.has(toolName)) {
+        console.error(`Plugin ${name}: skipping duplicate tool ${toolName}`);
+        continue;
+      }
       const schema = buildZodSchema(toolDef.params);
       const handler = buildHandler(toolDef.command, toolDef.params);
       server.tool(toolName, toolDef.description || toolName, schema, handler);
+      registeredTools.add(toolName);
     }
   }
 }
@@ -319,13 +333,89 @@ loadPluginTools();
 
 // ── Start ───────────────────────────────────────────────────────────
 
-async function main() {
+const MCP_PORT = parseInt(process.env.CODA_MCP_PORT || "3111", 10);
+const MODE = process.argv.includes("--stdio") ? "stdio" : "http";
+
+async function startStdio() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("coda MCP server running on stdio");
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err);
-  process.exit(1);
-});
+function startHttp() {
+  const transports = new Map();
+
+  const httpServer = createServer(async (req, res) => {
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/mcp") {
+      const body = await readBody(req);
+      const sessionId = req.headers["mcp-session-id"];
+
+      if (sessionId && transports.has(sessionId)) {
+        await transports.get(sessionId).handleRequest(req, res, body);
+      } else if (!sessionId && isInitializeRequest(body)) {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => transports.set(sid, transport),
+        });
+        transport.onclose = () => {
+          if (transport.sessionId) transports.delete(transport.sessionId);
+        };
+        await server.connect(transport);
+        await transport.handleRequest(req, res, body);
+      } else {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid request: missing session or not an initialize request" }));
+      }
+      return;
+    }
+
+    if (req.method === "DELETE" && req.url === "/mcp") {
+      const sessionId = req.headers["mcp-session-id"];
+      if (sessionId && transports.has(sessionId)) {
+        const transport = transports.get(sessionId);
+        await transport.close();
+        transports.delete(sessionId);
+      }
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  httpServer.listen(MCP_PORT, "127.0.0.1", () => {
+    console.error(`coda MCP server listening on http://127.0.0.1:${MCP_PORT}/mcp`);
+  });
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString()));
+      } catch (e) {
+        resolve(null);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+if (MODE === "stdio") {
+  startStdio().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+} else {
+  startHttp();
+}

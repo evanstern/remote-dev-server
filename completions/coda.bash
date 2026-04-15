@@ -88,7 +88,7 @@ _coda_complete() {
         cword=$COMP_CWORD
     }
 
-    local top_subcommands="attach ls switch serve auth project feature layout profile hooks watch provider github plugin help"
+    local top_subcommands="attach ls switch serve auth project feature layout profile hooks watch mcp provider github plugin help"
 
     local plugin_cmd_names
     plugin_cmd_names=$(_coda_plugin_command_names 2>/dev/null)
@@ -160,6 +160,9 @@ _coda_complete() {
                     ;;
                 watch)
                     COMPREPLY=($(compgen -W "start stop status" -- "$cur"))
+                    ;;
+                mcp)
+                    COMPREPLY=($(compgen -W "start stop status restart" -- "$cur"))
                     ;;
                 hooks)
                     COMPREPLY=($(compgen -W "ls events create run" -- "$cur"))

@@ -24,9 +24,9 @@ _layout_init() {
 
     local half=$(( cols / 2 ))
 
-    tmux split-window -h -t "$session" -c "$dir" -l "$half" \
+    tmux split-window -h -t "$session:" -c "$dir" -l "$half" \
         "NVIM_APPNAME=$nvim_appname nvim .; exec \$SHELL"
-    tmux select-pane -t "$session" -L
+    tmux select-pane -t "$session:" -L
 }
 
 _layout_spawn() {

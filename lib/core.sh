@@ -52,6 +52,7 @@ coda() {
         layout)           _coda_layout_cmd "${args[@]:1}"; status=$? ;;
         profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
         watch)            _coda_watch "${args[@]:1}"; status=$? ;;
+        mcp)              _coda_mcp "${args[@]:1}"; status=$? ;;
         github)           _coda_github "${args[@]:1}"; status=$? ;;
         plugin)           _coda_plugin_cmd "${args[@]:1}"; status=$? ;;
         version|--version|-V)  echo "coda $CODA_VERSION"; status=$? ;;
@@ -233,6 +234,11 @@ USAGE
   coda watch                       Start monitoring sessions (bell on idle)
   coda watch stop                  Stop the watcher
   coda watch status                Check if watcher is running
+
+  coda mcp                         Start the shared MCP server
+  coda mcp stop                    Stop the MCP server
+  coda mcp status                  Check MCP server status
+  coda mcp restart                 Restart the MCP server
 
   coda github token                Print a GitHub App installation token
   coda github comment --issue N    Post a comment as Coda [bot]

@@ -91,6 +91,7 @@ _coda() {
                 'layout:manage and apply tmux layouts'
                 'profile:manage config profiles'
                 'watch:monitor sessions for attention signals'
+                'mcp:manage the shared MCP server'
                 'hooks:manage lifecycle hooks'
                 'provider:manage provider plugins'
                 'github:post comments as Coda bot identity'
@@ -133,6 +134,9 @@ _coda() {
                     ;;
                 watch)
                     _coda_watch_args
+                    ;;
+                mcp)
+                    _coda_mcp_args
                     ;;
                 provider)
                     _coda_provider_args
@@ -350,6 +354,26 @@ _coda_watch_args() {
                 'status:check if watcher is running'
             )
             _describe 'watch subcommand' subcmds
+            ;;
+    esac
+}
+
+_coda_mcp_args() {
+    local state line
+    _arguments -C \
+        '1: :->subcmd' \
+        && return 0
+
+    case $state in
+        subcmd)
+            local -a subcmds
+            subcmds=(
+                'start:start the MCP server'
+                'stop:stop the MCP server'
+                'status:check MCP server status'
+                'restart:restart the MCP server'
+            )
+            _describe 'mcp subcommand' subcmds
             ;;
     esac
 }
