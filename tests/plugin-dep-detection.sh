@@ -27,8 +27,10 @@ assert_eq 1 "$(_coda_plugin_find_dep __coda_test_nonexistent_thing__ && echo 0 |
 mkdir -p "$HOME/.opencode/bin"
 printf '#!/bin/sh\necho hello\n' > "$HOME/.opencode/bin/fake-opencode"
 chmod +x "$HOME/.opencode/bin/fake-opencode"
-assert_eq 0 "$(_coda_plugin_find_dep fake-opencode && echo 0 || echo 1)" \
-    "should find binary in ~/.opencode/bin/"
+
+# Call in current shell (not subshell) so PATH mutation is visible
+_coda_plugin_find_dep fake-opencode
+assert_eq 0 "$?" "should find binary in ~/.opencode/bin/"
 
 # After finding in fallback dir, PATH should include the dir
 case ":$PATH:" in

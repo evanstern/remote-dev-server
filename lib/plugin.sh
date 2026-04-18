@@ -151,7 +151,7 @@ _coda_plugin_find_dep() {
         if [ -x "$dir/$dep" ]; then
             case ":${PATH:-}:" in
                 *":$dir:"*) ;;
-                *) export PATH="$dir:$PATH" ;;
+                *) export PATH="$dir${PATH:+:$PATH}" ;;
             esac
             return 0
         fi
