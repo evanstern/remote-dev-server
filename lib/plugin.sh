@@ -144,10 +144,17 @@ _coda_plugin_load_all() {
 _coda_plugin_find_dep() {
     local dep="$1"
     command -v "$dep" &>/dev/null && return 0
-    # Check well-known install locations not always on PATH
+    # Check well-known install locations not always on PATH;
+    # prepend the directory so callers can invoke the dep by name.
     local dir
     for dir in "$HOME/.opencode/bin" "$HOME/.local/bin"; do
-        [ -x "$dir/$dep" ] && return 0
+        if [ -x "$dir/$dep" ]; then
+            case ":${PATH:-}:" in
+                *":$dir:"*) ;;
+                *) export PATH="$dir:$PATH" ;;
+            esac
+            return 0
+        fi
     done
     return 1
 }

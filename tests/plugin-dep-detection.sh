@@ -30,6 +30,12 @@ chmod +x "$HOME/.opencode/bin/fake-opencode"
 assert_eq 0 "$(_coda_plugin_find_dep fake-opencode && echo 0 || echo 1)" \
     "should find binary in ~/.opencode/bin/"
 
+# After finding in fallback dir, PATH should include the dir
+case ":$PATH:" in
+    *":$HOME/.opencode/bin:"*) ;;
+    *) fail "~/.opencode/bin should be on PATH after find_dep" ;;
+esac
+
 # _coda_plugin_find_dep should find binaries in ~/.local/bin/
 mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\necho hello\n' > "$HOME/.local/bin/fake-local-tool"
