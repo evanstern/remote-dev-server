@@ -232,6 +232,20 @@ _coda_plugin_load() {
         [ -z "$glob" ] && continue
         _CODA_PLUGIN_NOTIFICATIONS+=("$dir/$glob")
     done <<< "$notifs"
+
+    # Source init script (eager load at shell init, not lazy)
+    local init_script
+    init_script=$(jq -r '.init // empty' "$manifest" 2>/dev/null)
+    if [ -n "$init_script" ]; then
+        # Reject path traversal
+        case "$init_script" in
+            ../*|*/../*|/*) echo "warning: plugin '$name' init path '$init_script' is invalid, skipping" >&2; return 0 ;;
+        esac
+        if [ -f "$dir/$init_script" ]; then
+            # shellcheck source=/dev/null
+            source "$dir/$init_script"
+        fi
+    fi
 }
 
 _coda_plugin_name_from_url() {
