@@ -407,9 +407,13 @@ function startHttp() {
       if (sessionId && transports.has(sessionId)) {
         await transports.get(sessionId).handleRequest(req, res, body);
       } else if (sessionId && !transports.has(sessionId)) {
-        // Stale session — tell the client to re-initialize
+        // Stale/unknown session — return 404 per MCP spec so clients re-initialize
         res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Session not found" }));
+        res.end(JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Session not found" },
+          id: null,
+        }));
       } else if (isInitializeRequest(body)) {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
