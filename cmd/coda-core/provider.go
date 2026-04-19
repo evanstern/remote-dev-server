@@ -58,6 +58,12 @@ func runProviderAuth(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: could not discover models from %s/models\n", *baseURL)
 		fmt.Fprintln(os.Stderr, "Writing fallback CLIProxyAPI provider config instead.")
 		modelsJSON = fallbackModels()
+	} else {
+		for id, val := range fallbackModels() {
+			if _, exists := modelsJSON[id]; !exists {
+				modelsJSON[id] = val
+			}
+		}
 	}
 
 	if err := mergeProviderConfig(*configPath, *baseURL, *apiKey, modelsJSON); err != nil {
@@ -305,6 +311,7 @@ func fallbackModels() map[string]interface{} {
 		"gpt-4o":                     map[string]string{"name": "gpt-4o"},
 		"gpt-4.1":                    map[string]string{"name": "gpt-4.1"},
 		"claude-opus-4-6":            map[string]string{"name": "claude-opus-4-6"},
+		"claude-opus-4-7":            map[string]string{"name": "claude-opus-4-7"},
 		"claude-haiku-4-5-20251001":  map[string]string{"name": "claude-haiku-4-5-20251001"},
 		"claude-sonnet-4-5-20250929": map[string]string{"name": "claude-sonnet-4-5-20250929"},
 	}
