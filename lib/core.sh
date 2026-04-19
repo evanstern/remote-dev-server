@@ -80,6 +80,17 @@ _coda_attach() {
     local profile="${CODA_PROFILE:-}"
     local flag_layout="${CODA_LAYOUT:-}"
 
+    local orch_target="${CODA_ORCH_TARGET:-${CODA_ORCH_SESSION:-}}"
+    local window_mode=false
+    if [ "${CODA_ORCH_WINDOW_MODE:-}" = "1" ] && [ -n "$orch_target" ]; then
+        if tmux has-session -t "$orch_target" 2>/dev/null; then
+            window_mode=true
+        else
+            echo "Orchestrator session not found: $orch_target"
+            echo "Falling back to standalone session-mode."
+        fi
+    fi
+
     if [ -n "$profile" ]; then
         local profile_file
         profile_file=$(_coda_resolve_profile "$profile")
@@ -97,6 +108,75 @@ _coda_attach() {
     config_lines=$(_coda_resolve_effective_config "$project_root" "$profile" "$flag_layout")
     layout=$(printf '%s' "$config_lines" | sed -n '1p')
     nvim_appname=$(printf '%s' "$config_lines" | sed -n '2p')
+
+    if [ "$window_mode" = true ]; then
+        local window_name=""
+        if [ -n "$project_root" ]; then
+            local sanitized_project project_window_prefix
+            sanitized_project=$(_coda_sanitize_session_name "$(basename "$project_root")")
+            project_window_prefix="${SESSION_PREFIX}${sanitized_project}--"
+            case "$session" in
+                "${project_window_prefix}"*)
+                    window_name="${session#${project_window_prefix}}"
+                    ;;
+            esac
+        fi
+        if [ -z "$window_name" ]; then
+            window_name="${session#${SESSION_PREFIX}}"
+            window_name="${window_name#*--}"
+            [ -n "$window_name" ] || window_name="${session#${SESSION_PREFIX}}"
+        fi
+
+        _coda_load_layout "$layout" || return 1
+
+        if ! declare -f _layout_spawn &>/dev/null; then
+            echo "Layout '$layout' does not support window-mode (missing _layout_spawn)."
+            return 1
+        fi
+
+        local window_target="${orch_target}:${window_name}"
+        local window_exists=false
+        if tmux list-windows -t "$orch_target" -F '#{session_name}:#{window_name}' 2>/dev/null \
+             | grep -Fxq "$window_target"; then
+            window_exists=true
+        fi
+
+        if [ "$window_exists" = false ]; then
+            if ! CODA_LAYOUT_TARGET="$window_target" \
+                    _layout_spawn "$orch_target" "$dir" "$nvim_appname"; then
+                echo "Failed to spawn window '$window_target'."
+                return 1
+            fi
+        fi
+
+        tmux set-environment -t "$orch_target" CODA_DIR "$dir"
+
+        if [ "$window_exists" = false ]; then
+            CODA_SESSION_NAME="$window_target" \
+            CODA_SESSION_DIR="$dir" CODA_SESSION_LAYOUT="$layout" \
+                _coda_run_hooks post-session-create
+        fi
+
+        if [ -n "${TMUX:-}" ]; then
+            if tmux list-windows -t "$orch_target" -F '#{session_name}:#{window_name}' 2>/dev/null \
+                 | grep -Fxq "$window_target"; then
+                tmux switch-client -t "$window_target" \
+                    || tmux switch-client -t "$orch_target"
+            else
+                echo "Warning: expected window '$window_target' was not created."
+                echo "Falling back to orchestrator session '$orch_target'."
+                tmux switch-client -t "$orch_target"
+            fi
+            CODA_SESSION_NAME="$window_target" \
+                _coda_run_hooks post-session-attach
+        else
+            CODA_SESSION_NAME="$window_target" \
+                _coda_run_hooks post-session-attach
+            tmux attach -t "$orch_target"
+        fi
+
+        return 0
+    fi
 
     if ! tmux has-session -t "$session" 2>/dev/null; then
         CODA_SESSION_NAME="$session" CODA_SESSION_DIR="$dir" \
@@ -212,6 +292,7 @@ USAGE
   coda project ls                                 List projects in PROJECTS_DIR
 
   coda feature start <branch> [base] [project]   New worktree + session
+  coda feature start <branch> --orch <name>      New worktree as window in orch session
   coda feature done  <branch> [project]          Teardown worktree + session
   coda feature finish [--force]                  Teardown current feature (agent-safe)
   coda feature ls                                List worktrees for this project
@@ -260,6 +341,7 @@ EXAMPLES
   coda project start --new my-tool -m "CLI for managing widgets"
   cd ~/projects/myapp/main
   coda feature start auth
+  coda feature start auth --orch riley          # window in orch session
   coda --profile experimental feature start auth
   coda --layout classic myapp
   coda ls
