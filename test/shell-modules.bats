@@ -1646,3 +1646,161 @@ _coda95_stub_git() {
     rm -rf "$proj_dir" "$capture_file"
     unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
 }
+
+# --- Card #123: pre-feature-teardown fires before worktree removal ---
+
+@test "card123: _coda_feature_done fires pre-feature-teardown before worktree removal" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() {
+        if [ "$1" = "pre-feature-teardown" ]; then
+            # Record whether the worktree still exists when the hook fires.
+            if [ -d "${CODA_WORKTREE_DIR:-/nonexistent}" ]; then
+                echo "worktree-exists-at-hook=yes branch=${CODA_FEATURE_BRANCH:-unset}" >"$capture_file"
+            else
+                echo "worktree-exists-at-hook=no branch=${CODA_FEATURE_BRANCH:-unset}" >"$capture_file"
+            fi
+        fi
+        return 0
+    }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget123a)
+    export PROJECTS_DIR=$(dirname "$proj_dir")
+    mkdir -p "$proj_dir/card123-a"
+    cd "$proj_dir/main"
+    _coda_feature_done card123-a widget123a >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"worktree-exists-at-hook=yes"* ]]
+    [[ "$line" == *"branch=card123-a"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
+}
+
+@test "card123: _coda_feature_done passes all expected env vars to pre-feature-teardown" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() {
+        if [ "$1" = "pre-feature-teardown" ]; then
+            echo "proj=${CODA_PROJECT_NAME:-unset} dir=${CODA_PROJECT_DIR:-unset} branch=${CODA_FEATURE_BRANCH:-unset} worktree=${CODA_WORKTREE_DIR:-unset} session=${CODA_SESSION_NAME:-unset}" >"$capture_file"
+        fi
+        return 0
+    }
+    tmux() { return 0; }
+    _coda95_stub_git
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget123b)
+    export PROJECTS_DIR=$(dirname "$proj_dir")
+    mkdir -p "$proj_dir/card123-b"
+    cd "$proj_dir/main"
+    _coda_feature_done card123-b widget123b >/dev/null 2>&1
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"proj=widget123b"* ]]
+    [[ "$line" == *"branch=card123-b"* ]]
+    [[ "$line" == *"worktree=$proj_dir/card123-b"* ]]
+    [[ "$line" == *"session=${SESSION_PREFIX}widget123b--card123-b"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
+}
+
+@test "card123: _coda_feature_finish fires pre-feature-teardown before worktree removal" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() {
+        if [ "$1" = "pre-feature-teardown" ]; then
+            if [ -d "${CODA_WORKTREE_DIR:-/nonexistent}" ]; then
+                echo "worktree-exists-at-hook=yes branch=${CODA_FEATURE_BRANCH:-unset}" >"$capture_file"
+            else
+                echo "worktree-exists-at-hook=no branch=${CODA_FEATURE_BRANCH:-unset}" >"$capture_file"
+            fi
+        fi
+        return 0
+    }
+    tmux() { return 0; }
+    # Stub git: rev-parse returns the branch name; worktree remove
+    # actually removes the dir so we can verify ordering.
+    git() {
+        case "$1" in
+            -C)
+                case "$3" in
+                    rev-parse) echo card123-c; return 0 ;;
+                    diff)      return 0 ;;
+                    ls-files)  return 0 ;;
+                    show-ref)  return 0 ;;
+                    worktree)
+                        case "$4" in
+                            remove) rm -rf "$5" 2>/dev/null; return 0 ;;
+                        esac
+                        return 0 ;;
+                    branch) return 0 ;;
+                esac
+                return 0 ;;
+            rev-parse) echo card123-c; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget123c)
+    mkdir -p "$proj_dir/card123-c"
+    cd "$proj_dir/card123-c"
+    _coda_feature_finish --force >/dev/null 2>&1
+    # finish backgrounds work with sleep 1 -- poll for completion
+    local waited=0
+    while [ ! -s "$capture_file" ] && [ $waited -lt 30 ]; do
+        sleep 0.2
+        waited=$((waited + 1))
+    done
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"worktree-exists-at-hook=yes"* ]]
+    [[ "$line" == *"branch=card123-c"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
+}
+
+@test "card123: _coda_feature_finish passes session name to pre-feature-teardown" {
+    local capture_file
+    capture_file=$(mktemp)
+    _coda_run_hooks() {
+        if [ "$1" = "pre-feature-teardown" ]; then
+            echo "session=${CODA_SESSION_NAME:-unset}" >"$capture_file"
+        fi
+        return 0
+    }
+    tmux() { return 0; }
+    git() {
+        case "$1" in
+            -C)
+                case "$3" in
+                    rev-parse) echo card123-d; return 0 ;;
+                    *) return 0 ;;
+                esac ;;
+            rev-parse) echo card123-d; return 0 ;;
+        esac
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
+    local proj_dir
+    proj_dir=$(_coda95_setup_fake_project widget123d)
+    mkdir -p "$proj_dir/card123-d"
+    cd "$proj_dir/card123-d"
+    _coda_feature_finish --force >/dev/null 2>&1
+    local waited=0
+    while [ ! -s "$capture_file" ] && [ $waited -lt 30 ]; do
+        sleep 0.2
+        waited=$((waited + 1))
+    done
+    local line
+    line=$(cat "$capture_file")
+    [[ "$line" == *"session=${SESSION_PREFIX}widget123d--card123-d"* ]]
+    cd /
+    rm -rf "$proj_dir" "$capture_file"
+    unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
+}
