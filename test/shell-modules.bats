@@ -1664,7 +1664,26 @@ _coda95_stub_git() {
         return 0
     }
     tmux() { return 0; }
-    _coda95_stub_git
+    # Override git so `git -C <root> worktree remove <dir>` actually removes
+    # the dir; this is what makes the ordering assertion meaningful. If the
+    # hook fired AFTER the removal call, worktree-exists-at-hook would be "no".
+    git() {
+        case "$1" in
+            -C)
+                case "$3" in
+                    worktree)
+                        case "$4" in
+                            remove) rm -rf "$5" 2>/dev/null; return 0 ;;
+                        esac
+                        return 0 ;;
+                    show-ref) return 1 ;;
+                    rev-parse) echo main; return 0 ;;
+                    *) return 0 ;;
+                esac ;;
+        esac
+        return 0
+    }
+    _coda_detect_default_branch() { echo main; }
     local proj_dir
     proj_dir=$(_coda95_setup_fake_project widget123a)
     export PROJECTS_DIR=$(dirname "$proj_dir")
@@ -1675,6 +1694,9 @@ _coda95_stub_git() {
     line=$(cat "$capture_file")
     [[ "$line" == *"worktree-exists-at-hook=yes"* ]]
     [[ "$line" == *"branch=card123-a"* ]]
+    # Sanity check: the stubbed removal actually ran, so the hook ordering
+    # assertion above is meaningful (not just "removal never happened").
+    [ ! -d "$proj_dir/card123-a" ]
     cd /
     rm -rf "$proj_dir" "$capture_file"
     unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
