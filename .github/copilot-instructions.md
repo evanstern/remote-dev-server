@@ -82,11 +82,11 @@ Session names are derived deterministically, but note that the implementation sa
 A coda project at `$PROJECTS_DIR/<name>/` looks like:
 ```
 <name>/
-  .bare/       git objects (bare repo)
-  .git         text file: "gitdir: ./.bare"
-  main/        worktree for the default branch
-  <branch>/    worktree for each active feature branch
-  .coda.env    optional per-project config overrides
+  .bare/             git objects (bare repo)
+  .git               text file: "gitdir: ./.bare"
+  <default-branch>/  worktree for the repository's default branch
+  <branch>/          worktree for each active non-default feature branch
+  .coda.env          optional per-project config overrides
 ```
 
 `_coda_find_project_root` walks up the directory tree looking for this `.bare` + `.git` pattern.
