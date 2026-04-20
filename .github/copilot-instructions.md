@@ -71,10 +71,11 @@ Always read the ADRs before making significant changes:
 
 ### Session naming
 
-Session names are derived deterministically:
-- Project session: `${SESSION_PREFIX}${sanitized_project_name}` (e.g. `coda-myapp`)
-- Feature session: `${SESSION_PREFIX}${sanitized_project_name}--${sanitized_branch}` (e.g. `coda-myapp--auth-flow`)
+Session names are derived deterministically, but note that the implementation sanitizes the full session name string at attach time rather than always sanitizing project and branch separately first:
+- Project session: typically `${SESSION_PREFIX}<project>`, then `_coda_sanitize_session_name(...)` is applied to the whole name (e.g. `coda-myapp`)
+- Feature session: typically `${SESSION_PREFIX}<project>--<branch>`, then `_coda_sanitize_session_name(...)` is applied to that whole name (e.g. `coda-myapp--auth-flow`)
 - Sanitization: `_coda_sanitize_session_name` replaces `.`, `/`, ` `, `:` with `-`.
+- Important mismatch: `lib/feature.sh` teardown logic currently computes the feature session name from the raw branch, so do not assume `${sanitized_branch}` is used consistently everywhere session names are reconstructed.
 
 ### Project layout on disk
 
