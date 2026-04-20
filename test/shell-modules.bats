@@ -1665,9 +1665,24 @@ _card121_stub_tmux() {
 }
 
 _card121_stub_ss() {
+    # Capture args so tests can assert the kernel-level `sport = :$port`
+    # filter is actually passed to ss. Bindings key off the requested port
+    # so a listener on :31111 never leaks into a :3111 query.
     ss() {
-        if [ -n "${PORT_BINDING:-}" ]; then
-            echo "LISTEN 0 511 127.0.0.1:${CODA_MCP_PORT:-3111} 0.0.0.0:* users:((\"node\",${PORT_BINDING},fd=21))"
+        if [ -n "${CARD121_SS_ARGS_LOG:-}" ]; then
+            printf '%s\n' "$*" >> "$CARD121_SS_ARGS_LOG"
+        fi
+        local requested_port=""
+        for arg in "$@"; do
+            case "$arg" in
+                *": :"*) requested_port="${arg##*: :}" ;;
+                *":"*) requested_port="${arg##*:}" ;;
+            esac
+        done
+        if [ -n "${PORT_BINDING:-}" ] \
+            && { [ -z "${PORT_BINDING_PORT:-}" ] || [ "$requested_port" = "$PORT_BINDING_PORT" ]; }; then
+            local listener_port="${PORT_BINDING_PORT:-$requested_port}"
+            echo "LISTEN 0 511 127.0.0.1:${listener_port} 0.0.0.0:* users:((\"node\",${PORT_BINDING},fd=21))"
         fi
         return 0
     }
@@ -1682,7 +1697,8 @@ _card121_stub_kill() {
 
 _card121_teardown() {
     unset -f tmux ss kill 2>/dev/null || true
-    unset TMUX_SESSION_EXISTS PORT_BINDING CARD121_TMUX_LOG CARD121_KILL_LOG
+    unset TMUX_SESSION_EXISTS PORT_BINDING PORT_BINDING_PORT \
+        CARD121_TMUX_LOG CARD121_KILL_LOG CARD121_SS_ARGS_LOG
 }
 
 @test "card121: _coda_mcp_port_pid returns empty when no listener" {
@@ -1693,17 +1709,31 @@ _card121_teardown() {
     _card121_teardown
 }
 
-@test "card121: _coda_mcp_port_pid returns pid on exact match (no prefix overlap)" {
+@test "card121: _coda_mcp_port_pid returns pid on exact match" {
     PORT_BINDING="pid=4242"
+    PORT_BINDING_PORT=3111
     _card121_stub_ss
     result=$(_coda_mcp_port_pid 3111)
     [ "$result" = "4242" ]
-    # And when ss returns empty (as it would for a different port), result is empty.
-    # This proves the awk extraction depends on ss output, not on us re-grepping
-    # the port number -- so :31111 vs :3111 never cross.
-    PORT_BINDING=""
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_port_pid passes sport filter to ss (no prefix overlap)" {
+    # Listener lives on :31111. Query :3111. If _coda_mcp_port_pid used a
+    # naive `grep :$port`, it would match. We assert two things:
+    #   1. ss is invoked with the exact `sport = :3111` filter (kernel-side
+    #      exact match -- the real guarantee).
+    #   2. When the stub respects that filter (i.e. the listener is on a
+    #      different port), the result is empty.
+    PORT_BINDING="pid=9001"
+    PORT_BINDING_PORT=31111
+    CARD121_SS_ARGS_LOG=$(mktemp)
+    _card121_stub_ss
     result=$(_coda_mcp_port_pid 3111)
     [ -z "$result" ]
+    grep -Fq 'sport = :3111' "$CARD121_SS_ARGS_LOG"
+    ! grep -Fq 'sport = :31111' "$CARD121_SS_ARGS_LOG"
+    rm -f "$CARD121_SS_ARGS_LOG"
     _card121_teardown
 }
 

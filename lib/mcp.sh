@@ -105,7 +105,11 @@ _coda_mcp_stop() {
     port_pid=$(_coda_mcp_port_pid "$port")
 
     if [ -n "$port_pid" ]; then
-        echo "Warning: port $port still bound after tmux cleanup (pid $port_pid)."
+        if $killed_tmux; then
+            echo "Warning: port $port still bound after tmux cleanup (pid $port_pid)."
+        else
+            echo "Warning: port $port is bound by pid $port_pid (no tmux session)."
+        fi
         echo "  Killing rogue process..."
         kill "$port_pid" 2>/dev/null
         # Give it 1s; escalate to SIGKILL if needed.
