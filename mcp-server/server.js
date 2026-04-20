@@ -19,6 +19,20 @@ const z = require("zod");
 const execFileAsync = promisify(execFile);
 
 const CODA_DIR = process.env.CODA_DIR || path.resolve(__dirname, "..");
+
+const SERVER_STARTED_AT = new Date().toISOString();
+
+let SERVER_GIT_SHA = "unknown";
+try {
+  const { execFileSync } = require("child_process");
+  SERVER_GIT_SHA = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    cwd: CODA_DIR,
+    stdio: ["ignore", "pipe", "ignore"],
+  }).toString().trim() || "unknown";
+} catch (_) {
+  // SHA stays "unknown" if git isn't available or CODA_DIR isn't a repo.
+}
+
 const SHELL = "/bin/bash";
 
 async function runCoda(args, { cwd, timeout = 15000 } = {}) {
@@ -397,6 +411,15 @@ function startHttp() {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    if (req.method === "GET" && req.url === "/version") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        sha: SERVER_GIT_SHA,
+        started: SERVER_STARTED_AT,
+      }));
       return;
     }
 

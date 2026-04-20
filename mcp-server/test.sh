@@ -254,6 +254,43 @@ else
     rm -f "$bad_resp"
 fi
 
+# --- Test 8: HTTP mode version endpoint ---
+echo "8. HTTP mode version endpoint"
+if curl -sf "http://127.0.0.1:$HTTP_PORT/health" >/dev/null 2>&1; then
+    version_resp=$(mktemp)
+    version_status=$(curl -s -o "$version_resp" -w '%{http_code}' \
+        "http://127.0.0.1:$HTTP_PORT/version")
+    if [ "$version_status" = "200" ]; then
+        pass "/version returns HTTP 200"
+    else
+        fail "/version expected 200, got $version_status"
+    fi
+    version_body=$(cat "$version_resp")
+    if echo "$version_body" | grep -q '"sha"' && echo "$version_body" | grep -q '"started"'; then
+        pass "/version body has sha and started fields"
+    else
+        fail "/version body missing sha/started: $version_body"
+    fi
+    reported_sha=$(echo "$version_body" | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')
+    reported_started=$(echo "$version_body" | sed -n 's/.*"started":"\([^"]*\)".*/\1/p')
+    if [ -n "$reported_sha" ] && [ -n "$reported_started" ]; then
+        pass "/version sha and started are non-empty"
+    else
+        fail "/version sha='$reported_sha' started='$reported_started' (expected both non-empty)"
+    fi
+    expected_sha=$(git rev-parse --short HEAD 2>/dev/null)
+    if [ -n "$expected_sha" ] && [ "$reported_sha" = "$expected_sha" ]; then
+        pass "/version sha matches git rev-parse --short HEAD"
+    elif [ -z "$expected_sha" ]; then
+        pass "/version sha check skipped (not in a git repo)"
+    else
+        fail "/version sha '$reported_sha' != git HEAD '$expected_sha'"
+    fi
+    rm -f "$version_resp"
+else
+    fail "HTTP server not reachable for /version test"
+fi
+
 cleanup_http
 
 # --- Summary ---

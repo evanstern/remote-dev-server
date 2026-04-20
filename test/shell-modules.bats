@@ -2013,3 +2013,134 @@ _card121_teardown() {
     rm -rf "$proj_dir" "$capture_file"
     unset -f _coda_run_hooks tmux git _coda_detect_default_branch _coda_prune_sessions_for_dir
 }
+
+# --- Card #122: MCP server /version endpoint ---
+
+_card122_setup() {
+    _coda_mcp_port_pid() { echo 12345; return 0; }
+    tmux() {
+        case "$1" in
+            has-session) return 0 ;;
+            display-message) echo "2026-04-20"; return 0 ;;
+        esac
+        return 0
+    }
+    export _CODA_DIR=/tmp/fake-repo-card122
+}
+
+_card122_teardown() {
+    unset -f _coda_mcp_port_pid tmux curl git 2>/dev/null || true
+}
+
+@test "card122: _coda_mcp_status prints Version: <sha> (current) when shas match" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) echo '{"sha":"abc1234","started":"2026-04-20T00:00:00Z"}'; return 0 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) echo abc1234; return 0 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Version: abc1234 (current)"* ]]
+    _card122_teardown
+}
+
+@test "card122: _coda_mcp_status reports stale with both shas and restart hint" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) echo '{"sha":"abc1234","started":"2026-04-20T00:00:00Z"}'; return 0 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) echo def5678; return 0 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"stale"* ]]
+    [[ "$output" == *"abc1234"* ]]
+    [[ "$output" == *"def5678"* ]]
+    [[ "$output" == *"coda mcp restart"* ]]
+    _card122_teardown
+}
+
+@test "card122: _coda_mcp_status notes predates when /version returns nothing" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) return 22 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) echo abc1234; return 0 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"predates /version endpoint"* ]]
+    _card122_teardown
+}
+
+@test "card122: _coda_mcp_status prints plain unknown when server reports sha=unknown" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) echo '{"sha":"unknown","started":"2026-04-20T00:00:00Z"}'; return 0 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) echo abc1234; return 0 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Version: unknown"* ]]
+    [[ "$output" != *"Version: unknown (current)"* ]]
+    [[ "$output" != *"Version: unknown (stale"* ]]
+    _card122_teardown
+}
+
+@test "card122: _coda_mcp_status flags unknown local HEAD instead of falsely claiming current" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) echo '{"sha":"abc1234","started":"2026-04-20T00:00:00Z"}'; return 0 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) return 128 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"abc1234"* ]]
+    [[ "$output" == *"local HEAD unknown"* ]]
+    [[ "$output" != *"(current)"* ]]
+    [[ "$output" != *"(stale"* ]]
+    _card122_teardown
+}
