@@ -154,57 +154,6 @@ _coda_list_providers() {
     done
 }
 
-_coda_print_models_status() {
-    local models_url="$1"
-
-    if ! command -v curl &>/dev/null; then
-        echo "Models endpoint: unavailable (curl not found)"
-        return 0
-    fi
-
-    if ! command -v jq &>/dev/null; then
-        echo "Models endpoint: unavailable (jq not found)"
-        return 0
-    fi
-
-    local response
-    if ! response=$(_coda_fetch_cliproxyapi_models_response "$models_url"); then
-        echo "Models endpoint: unreachable ($models_url)"
-        return 0
-    fi
-
-    local http_code response_body
-    http_code=${response##*$'\n'}
-    response_body=${response%$'\n'*}
-
-    if [ "$http_code" = "000" ]; then
-        echo "Models endpoint: unreachable ($models_url)"
-        return 0
-    fi
-
-    if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
-        if [ -n "$CLIPROXYAPI_API_KEY" ]; then
-            echo "Models endpoint: unauthorized ($models_url, HTTP $http_code; configured proxy API key was rejected)"
-        else
-            echo "Models endpoint: unauthorized ($models_url, HTTP $http_code; set CLIPROXYAPI_API_KEY if your proxy requires auth)"
-        fi
-        return 0
-    fi
-
-    if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-        echo "Models endpoint: reachable with non-2xx response ($models_url, HTTP $http_code)"
-        return 0
-    fi
-
-    local count
-    count=$(printf '%s' "$response_body" | jq -r 'if ((.data? | type) == "array") then (.data | length) else 0 end' 2>/dev/null)
-    if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
-        echo "Models endpoint: reachable ($models_url, HTTP $http_code, $count models)"
-    else
-        echo "Models endpoint: reachable but returned no usable models ($models_url, HTTP $http_code)"
-    fi
-}
-
 _coda_fetch_cliproxyapi_models_response() {
     local models_url="$1"
 
