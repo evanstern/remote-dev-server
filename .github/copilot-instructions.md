@@ -101,7 +101,7 @@ A coda project at `$PROJECTS_DIR/<name>/` looks like:
 
 ### MCP server
 
-`mcp-server/server.js` is a single shared StreamableHTTP server on `CODA_MCP_PORT` (default 3111). All OpenCode sessions connect to it. It sources `shell-functions.sh` and calls `coda` subcommands as MCP tools. Run with `coda mcp start|stop|status|restart`.
+`mcp-server/server.js` defaults to running as a single shared StreamableHTTP server on `CODA_MCP_PORT` (default 3111), and all OpenCode sessions connect to that shared server. It also supports a stdio transport when launched with `--stdio`. It sources `shell-functions.sh` and calls `coda` subcommands as MCP tools. For the shared HTTP server, run with `coda mcp start|stop|status|restart`.
 
 **If you add or rename a `coda` subcommand, you must update the corresponding tool in `mcp-server/server.js`.**
 
