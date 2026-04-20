@@ -34,6 +34,7 @@ git -C "$SEED_REPO" add README.md >/dev/null
 git -C "$SEED_REPO" commit -m 'Initial commit' >/dev/null
 git clone --bare "$SEED_REPO" "$REMOTE_REPO" >/dev/null
 
+export CODA_SKIP_ENV=true
 source "$ROOT_DIR/shell-functions.sh"
 
 printf 'Running core lifecycle tests...\n'
