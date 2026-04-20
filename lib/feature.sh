@@ -253,6 +253,10 @@ _coda_feature_finish() {
 
     (
         sleep 1
+        CODA_PROJECT_NAME="$project_name" CODA_PROJECT_DIR="$project_root" \
+        CODA_FEATURE_BRANCH="$branch" CODA_WORKTREE_DIR="$worktree_dir" \
+        CODA_SESSION_NAME="$session" \
+            _coda_run_hooks pre-feature-teardown
         if tmux has-session -t "$session" 2>/dev/null; then
             tmux kill-session -t "$session"
         fi
