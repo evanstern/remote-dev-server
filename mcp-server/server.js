@@ -24,8 +24,8 @@ const SERVER_STARTED_AT = new Date().toISOString();
 
 let SERVER_GIT_SHA = "unknown";
 try {
-  const { execSync } = require("child_process");
-  SERVER_GIT_SHA = execSync("git rev-parse --short HEAD", {
+  const { execFileSync } = require("child_process");
+  SERVER_GIT_SHA = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
     cwd: CODA_DIR,
     stdio: ["ignore", "pipe", "ignore"],
   }).toString().trim() || "unknown";

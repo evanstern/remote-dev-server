@@ -170,7 +170,9 @@ _coda_mcp_status() {
                 head_sha=$(git -C "$_CODA_DIR" rev-parse --short HEAD 2>/dev/null)
                 if [ -z "$running_sha" ] || [ "$running_sha" = "unknown" ]; then
                     echo "  Version: unknown"
-                elif [ -n "$head_sha" ] && [ "$running_sha" != "$head_sha" ]; then
+                elif [ -z "$head_sha" ]; then
+                    echo "  Version: $running_sha (local HEAD unknown -- cannot compare)"
+                elif [ "$running_sha" != "$head_sha" ]; then
                     echo "  Version: $running_sha (stale; HEAD is $head_sha -- run 'coda mcp restart')"
                 else
                     echo "  Version: $running_sha (current)"

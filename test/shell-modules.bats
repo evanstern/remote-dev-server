@@ -2120,3 +2120,27 @@ _card122_teardown() {
     [[ "$output" != *"Version: unknown (stale"* ]]
     _card122_teardown
 }
+
+@test "card122: _coda_mcp_status flags unknown local HEAD instead of falsely claiming current" {
+    _card122_setup
+    curl() {
+        case "$*" in
+            *"/version"*) echo '{"sha":"abc1234","started":"2026-04-20T00:00:00Z"}'; return 0 ;;
+            *"/health"*)  echo '{"status":"ok"}'; return 0 ;;
+        esac
+        return 0
+    }
+    git() {
+        case "$*" in
+            *"rev-parse --short HEAD"*) return 128 ;;
+        esac
+        return 0
+    }
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"abc1234"* ]]
+    [[ "$output" == *"local HEAD unknown"* ]]
+    [[ "$output" != *"(current)"* ]]
+    [[ "$output" != *"(stale"* ]]
+    _card122_teardown
+}
