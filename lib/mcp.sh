@@ -79,7 +79,10 @@ _coda_mcp_start() {
 
     local mcp_cmd="CODA_MCP_PORT=$port CODA_DIR=$_CODA_DIR node $server_js"
 
-    tmux new-session -d -s "$mcp_session" "$mcp_cmd"
+    if ! tmux new-session -d -s "$mcp_session" "$mcp_cmd"; then
+        echo "Failed to start MCP server (tmux new-session exited non-zero)."
+        return 1
+    fi
     echo "MCP server started on port $port."
     echo "  View:    tmux attach -t $mcp_session"
     echo "  Stop:    coda mcp stop"
