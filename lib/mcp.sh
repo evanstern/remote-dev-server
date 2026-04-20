@@ -158,6 +158,27 @@ _coda_mcp_status() {
                 echo "  Health:  not responding"
             fi
         fi
+        if command -v curl &>/dev/null; then
+            local version_json running_sha head_sha
+            version_json=$(curl -sf "http://127.0.0.1:$port/version" 2>/dev/null)
+            if [ -n "$version_json" ]; then
+                if command -v jq &>/dev/null; then
+                    running_sha=$(echo "$version_json" | jq -r '.sha // "unknown"')
+                else
+                    running_sha=$(echo "$version_json" | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')
+                fi
+                head_sha=$(git -C "$_CODA_DIR" rev-parse --short HEAD 2>/dev/null)
+                if [ -z "$running_sha" ] || [ "$running_sha" = "unknown" ]; then
+                    echo "  Version: unknown"
+                elif [ -n "$head_sha" ] && [ "$running_sha" != "$head_sha" ]; then
+                    echo "  Version: $running_sha (stale; HEAD is $head_sha -- run 'coda mcp restart')"
+                else
+                    echo "  Version: $running_sha (current)"
+                fi
+            else
+                echo "  Version: unknown (server predates /version endpoint)"
+            fi
+        fi
         return 0
     fi
 
