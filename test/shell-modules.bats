@@ -1646,3 +1646,160 @@ _coda95_stub_git() {
     rm -rf "$proj_dir" "$capture_file"
     unset -f _coda_attach _coda_run_hooks tmux git _coda_detect_default_branch
 }
+
+# --- Card #121: coda mcp port-aware lifecycle ---
+
+_card121_stub_tmux() {
+    tmux() {
+        local op="$1"
+        case "$op" in
+            has-session)
+                [ "${TMUX_SESSION_EXISTS:-false}" = "true" ] && return 0
+                return 1 ;;
+            kill-session|new-session|display-message)
+                printf '%s\n' "$*" >> "${CARD121_TMUX_LOG:-/tmp/card121-tmux.log}"
+                return 0 ;;
+        esac
+        return 0
+    }
+}
+
+_card121_stub_ss() {
+    ss() {
+        if [ -n "${PORT_BINDING:-}" ]; then
+            echo "LISTEN 0 511 127.0.0.1:${CODA_MCP_PORT:-3111} 0.0.0.0:* users:((\"node\",${PORT_BINDING},fd=21))"
+        fi
+        return 0
+    }
+}
+
+_card121_stub_kill() {
+    kill() {
+        printf 'kill %s\n' "$*" >> "${CARD121_KILL_LOG:-/tmp/card121-kill.log}"
+        return 0
+    }
+}
+
+_card121_teardown() {
+    unset -f tmux ss kill 2>/dev/null || true
+    unset TMUX_SESSION_EXISTS PORT_BINDING CARD121_TMUX_LOG CARD121_KILL_LOG
+}
+
+@test "card121: _coda_mcp_port_pid returns empty when no listener" {
+    PORT_BINDING=""
+    _card121_stub_ss
+    result=$(_coda_mcp_port_pid 3111)
+    [ -z "$result" ]
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_port_pid returns pid on exact match (no prefix overlap)" {
+    PORT_BINDING="pid=4242"
+    _card121_stub_ss
+    result=$(_coda_mcp_port_pid 3111)
+    [ "$result" = "4242" ]
+    # And when ss returns empty (as it would for a different port), result is empty.
+    # This proves the awk extraction depends on ss output, not on us re-grepping
+    # the port number -- so :31111 vs :3111 never cross.
+    PORT_BINDING=""
+    result=$(_coda_mcp_port_pid 3111)
+    [ -z "$result" ]
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_start with tmux+port says already running" {
+    CARD121_TMUX_LOG=$(mktemp)
+    TMUX_SESSION_EXISTS=true
+    PORT_BINDING="pid=1234"
+    _card121_stub_tmux
+    _card121_stub_ss
+    run _coda_mcp_start "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already running"* ]]
+    [[ "$output" == *"pid 1234"* ]]
+    ! grep -q 'new-session' "$CARD121_TMUX_LOG"
+    rm -f "$CARD121_TMUX_LOG"
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_start with tmux only is broken state" {
+    CARD121_TMUX_LOG=$(mktemp)
+    TMUX_SESSION_EXISTS=true
+    PORT_BINDING=""
+    _card121_stub_tmux
+    _card121_stub_ss
+    run _coda_mcp_start "coda-mcp-server"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"tmux session exists"* ]]
+    [[ "$output" == *"coda mcp restart"* ]]
+    ! grep -q 'new-session' "$CARD121_TMUX_LOG"
+    rm -f "$CARD121_TMUX_LOG"
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_start with rogue port refuses and reports pid" {
+    CARD121_TMUX_LOG=$(mktemp)
+    TMUX_SESSION_EXISTS=false
+    PORT_BINDING="pid=9999"
+    _card121_stub_tmux
+    _card121_stub_ss
+    run _coda_mcp_start "coda-mcp-server"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"bound by pid 9999"* ]]
+    ! grep -q 'new-session' "$CARD121_TMUX_LOG"
+    rm -f "$CARD121_TMUX_LOG"
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_start with neither calls tmux new-session" {
+    CARD121_TMUX_LOG=$(mktemp)
+    TMUX_SESSION_EXISTS=false
+    PORT_BINDING=""
+    _card121_stub_tmux
+    _card121_stub_ss
+    # Point _CODA_DIR at a dir that has a fake server.js
+    local fake_dir
+    fake_dir=$(mktemp -d)
+    mkdir -p "$fake_dir/mcp-server"
+    : > "$fake_dir/mcp-server/server.js"
+    local old_coda_dir="$_CODA_DIR"
+    _CODA_DIR="$fake_dir"
+    run _coda_mcp_start "coda-mcp-server"
+    _CODA_DIR="$old_coda_dir"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"MCP server started"* ]]
+    grep -q 'new-session' "$CARD121_TMUX_LOG"
+    rm -rf "$fake_dir"
+    rm -f "$CARD121_TMUX_LOG"
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_stop kills rogue pid lingering after tmux kill" {
+    CARD121_TMUX_LOG=$(mktemp)
+    CARD121_KILL_LOG=$(mktemp)
+    TMUX_SESSION_EXISTS=true
+    PORT_BINDING="pid=7777"
+    _card121_stub_tmux
+    _card121_stub_ss
+    _card121_stub_kill
+    run _coda_mcp_stop "coda-mcp-server"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"still bound"* ]]
+    [[ "$output" == *"pid 7777"* ]]
+    grep -q 'kill-session' "$CARD121_TMUX_LOG"
+    grep -q 'kill 7777' "$CARD121_KILL_LOG"
+    rm -f "$CARD121_TMUX_LOG" "$CARD121_KILL_LOG"
+    _card121_teardown
+}
+
+@test "card121: _coda_mcp_status reports rogue when port bound without tmux" {
+    TMUX_SESSION_EXISTS=false
+    PORT_BINDING="pid=5555"
+    _card121_stub_tmux
+    _card121_stub_ss
+    run _coda_mcp_status "coda-mcp-server"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"rogue"* ]]
+    [[ "$output" == *"pid 5555"* ]]
+    _card121_teardown
+}
