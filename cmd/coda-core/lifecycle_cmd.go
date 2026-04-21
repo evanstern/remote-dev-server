@@ -28,15 +28,6 @@ func (e *codaCoreError) Error() string { return e.msg }
 
 func userError(f string, a ...any) error { return &codaCoreError{code: 1, msg: fmt.Sprintf(f, a...)} }
 func dbError(err error) error            { return &codaCoreError{code: 2, msg: err.Error()} }
-func hookBlocked(err error) error        { return &codaCoreError{code: 3, msg: err.Error()} }
-
-func exitCodeFor(err error) int {
-	var cce *codaCoreError
-	if errors.As(err, &cce) {
-		return cce.code
-	}
-	return 1
-}
 
 // parseInterleaved accepts flags anywhere in args (stdlib flag only
 // scans until the first non-flag token). It reorders args so flags come
@@ -410,9 +401,6 @@ func featureFinish(args []string) error {
 	if err != nil {
 		if errors.Is(err, lifecycle.ErrNotFound) {
 			return userError("%v", err)
-		}
-		if errors.Is(err, lifecycle.ErrHookBlocked) {
-			return hookBlocked(err)
 		}
 		return dbError(err)
 	}

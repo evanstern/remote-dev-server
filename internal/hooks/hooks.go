@@ -91,6 +91,9 @@ func (d *Dispatcher) scripts(event Event) ([]string, error) {
 		if e.IsDir() {
 			continue
 		}
+		if filepath.Ext(e.Name()) != ".sh" {
+			continue
+		}
 		info, err := e.Info()
 		if err != nil {
 			continue

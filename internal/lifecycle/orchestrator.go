@@ -22,9 +22,8 @@ const (
 )
 
 var (
-	ErrNotFound    = errors.New("not found")
-	ErrExists      = errors.New("already exists")
-	ErrHookBlocked = errors.New("hook blocked transition")
+	ErrNotFound = errors.New("not found")
+	ErrExists   = errors.New("already exists")
 )
 
 // Orchestrator is one row in the orchestrators table.

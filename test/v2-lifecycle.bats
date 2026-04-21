@@ -129,10 +129,30 @@ teardown() {
 }
 
 @test "v2 routing: bash coda feature start still routes to bash (v1)" {
-    # Sanity: `coda feature start` is v1, must not route to coda-core.
-    # We assert by checking that _coda_feature runs, not coda-core.
-    source "$SCRIPT_DIR/shell-functions.sh"
-    declare -f _coda_feature &>/dev/null
+    # Shadow coda-core on PATH with a sentinel binary. If bash routing
+    # leaks `feature start` to coda-core, the sentinel runs and we detect
+    # it via exit code 42 and the sentinel string. v1 routing should
+    # never invoke coda-core for `feature start`.
+    SHADOW_BIN_DIR="$(mktemp -d)"
+    cat >"$SHADOW_BIN_DIR/coda-core" <<'SENTINEL'
+#!/usr/bin/env bash
+echo "UNEXPECTED_CODA_CORE_INVOCATION"
+exit 42
+SENTINEL
+    chmod +x "$SHADOW_BIN_DIR/coda-core"
+
+    run env -i HOME="$HOME" PATH="$SHADOW_BIN_DIR:/usr/bin:/bin" \
+        CODA_PLUGINS_DIR="$TEST_BIN_DIR/empty-plugins" \
+        bash -c '
+        export AUTO_ATTACH_TMUX=false SSH_CONNECTION="" CODA_SKIP_ENV=true
+        source "'"$SCRIPT_DIR"'/shell-functions.sh"
+        coda feature start 2>/dev/null
+        true
+    '
+    rm -rf "$SHADOW_BIN_DIR"
+
+    [ "$status" -ne 42 ]
+    [[ "$output" != *"UNEXPECTED_CODA_CORE_INVOCATION"* ]]
 }
 
 @test "v2 routing: bash coda feature spawn routes to coda-core" {
