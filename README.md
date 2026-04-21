@@ -924,7 +924,7 @@ coda/
 |-- tests/                  Shell lifecycle regression tests (bash, mock tmux/fzf)
 |-- test/                   Bats integration tests (module loading, functional)
 |-- scripts/
-|   |-- streamdeck-vm104-connect.sh   Stream Deck helper
+|   |-- tmux-opencode-compose.sh      Popup editor → OpenCode pane paste
 |   \-- tmux-pane-picker.sh           Pane picker utility
 |-- tmux.conf               tmux configuration
 |-- tui.json.example        OpenCode TUI keybind config
