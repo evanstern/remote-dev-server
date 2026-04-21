@@ -133,7 +133,10 @@ else
     if [ ! -f "$_coda_core_installed" ]; then
         _coda_core_stale=true
     else
-        for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go; do
+        for _gofile in "$SCRIPT_DIR"/cmd/coda-core/*.go \
+                       "$SCRIPT_DIR"/internal/*/*.go \
+                       "$SCRIPT_DIR"/internal/*/*.sql \
+                       "$SCRIPT_DIR"/go.mod "$SCRIPT_DIR"/go.sum; do
             [ -f "$_gofile" ] && [ "$_gofile" -nt "$_coda_core_installed" ] && _coda_core_stale=true
         done
     fi

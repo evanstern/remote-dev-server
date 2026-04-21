@@ -47,7 +47,6 @@ coda() {
         provider)         _coda_provider "${args[@]:1}"; status=$? ;;
         serve)            _coda_serve "${args[@]:1}"; status=$? ;;
         project)          _coda_project "${args[@]:1}"; status=$? ;;
-        feature)          _coda_feature "${args[@]:1}"; status=$? ;;
         hooks)            _coda_hooks "${args[@]:1}"; status=$? ;;
         layout)           _coda_layout_cmd "${args[@]:1}"; status=$? ;;
         profile)          _coda_profile_cmd "${args[@]:1}"; status=$? ;;
@@ -55,6 +54,16 @@ coda() {
         mcp)              _coda_mcp "${args[@]:1}"; status=$? ;;
         github)           _coda_github "${args[@]:1}"; status=$? ;;
         plugin)           _coda_plugin_cmd "${args[@]:1}"; status=$? ;;
+        orchestrator)     _coda_v2_core "${args[@]}"; status=$? ;;
+        status)           _coda_v2_core "${args[@]}"; status=$? ;;
+        feature)
+            case "${args[1]:-}" in
+                spawn|attach)
+                    _coda_v2_core "${args[@]}"; status=$? ;;
+                *)
+                    _coda_feature "${args[@]:1}"; status=$? ;;
+            esac
+            ;;
         version|--version|-V)  echo "coda $CODA_VERSION"; status=$? ;;
         help|--help|-h)   _coda_help; status=$? ;;
         "")               _coda_attach; status=$? ;;
@@ -70,6 +79,15 @@ coda() {
 
     unset CODA_PROFILE CODA_LAYOUT
     return "$status"
+}
+
+_coda_v2_core() {
+    if ! command -v coda-core &>/dev/null; then
+        echo "coda-core binary not found on PATH." >&2
+        echo "Build with 'make coda-core' and install, or rerun ./install.sh." >&2
+        return 1
+    fi
+    coda-core "$@"
 }
 
 _coda_attach() {
