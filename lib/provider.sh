@@ -153,22 +153,3 @@ _coda_list_providers() {
         echo "$name"
     done
 }
-
-_coda_fetch_cliproxyapi_models_response() {
-    local models_url="$1"
-
-    if [ -n "$CLIPROXYAPI_API_KEY" ]; then
-        local header_file
-        header_file=$(mktemp) || return 1
-        printf 'Authorization: Bearer %s' "$CLIPROXYAPI_API_KEY" > "$header_file"
-        curl --silent --show-error --max-time 5 \
-            -H @"$header_file" \
-            --write-out '\n%{http_code}' "$models_url" 2>/dev/null
-        local rc=$?
-        rm -f "$header_file"
-        return $rc
-    else
-        curl --silent --show-error --max-time 5 \
-            --write-out '\n%{http_code}' "$models_url" 2>/dev/null
-    fi
-}

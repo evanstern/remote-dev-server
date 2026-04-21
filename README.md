@@ -918,13 +918,13 @@ coda/
 |-- man/
 |   \-- coda.1              Man page (installed to /usr/local/share/man/man1/)
 |-- docs/
-|   |-- coda-v1-design.md         Core design doc
-|   |-- coda-v1-branch-plan.md    Rewrite branch plan
-|   \-- adr/                      Architecture Decision Records
+|   |-- adr/                      Architecture Decision Records
+|   |-- plugin-contracts/         Plugin API contracts
+|   \-- archive/                  Historical design docs
 |-- tests/                  Shell lifecycle regression tests (bash, mock tmux/fzf)
 |-- test/                   Bats integration tests (module loading, functional)
 |-- scripts/
-|   |-- streamdeck-vm104-connect.sh   Stream Deck helper
+|   |-- tmux-opencode-compose.sh      Popup editor → OpenCode pane paste
 |   \-- tmux-pane-picker.sh           Pane picker utility
 |-- tmux.conf               tmux configuration
 |-- tui.json.example        OpenCode TUI keybind config

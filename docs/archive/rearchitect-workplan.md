@@ -294,7 +294,7 @@ New test cases:
 
 ### D6. Close Open Design Questions
 
-**File:** `docs/coda-v1-design.md`
+**File:** `docs/archive/coda-v1-design.md`
 
 | Question | Answer | Rationale |
 |----------|--------|-----------|

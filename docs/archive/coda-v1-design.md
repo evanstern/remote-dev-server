@@ -261,7 +261,6 @@ Without it, Coda becomes a bundle of one person's infrastructure choices instead
 - `install.sh`
 - `setup-vm.sh`
 - `coda-watcher.sh`
-- `scripts/streamdeck-vm104-connect.sh`
 - parts of `tmux.conf` that improve UX but do not define orchestration
 
 These can still ship in the repository. The important thing is that they are treated as supporting modules rather than the center of the design.

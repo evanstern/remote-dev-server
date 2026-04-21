@@ -6,9 +6,6 @@ It is intentionally opinionated.
 
 For fuller design context, also read:
 
-- `docs/coda-v1-design.md`
-- `docs/coda-v1-branch-plan.md`
-- `docs/coda-v1-slice-01-core-lifecycle.md`
 - `docs/adr/0001-core-orchestration-model.md`
 - `docs/adr/0002-layouts-and-customization-model.md`
 - `docs/adr/0003-companion-utilities-boundary.md`
@@ -210,7 +207,7 @@ While working here:
 - do not expand adjacent utilities before the core lifecycle is trustworthy
 - prefer small, testable slices over large conceptual rewrites
 
-The first proving slice is the core lifecycle spine described in `docs/coda-v1-slice-01-core-lifecycle.md`.
+The core lifecycle spine is the shipped `lib/core.sh`, `lib/feature.sh`, and `lib/project.sh`. See `docs/adr/` for architectural decisions.
 
 ## Decision Rule
 
