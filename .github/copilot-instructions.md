@@ -42,13 +42,11 @@ test/                       Bats integration tests
   tmux-integration.bats     Functional tmux integration tests
 layouts/                    Built-in tmux layout scripts
 docs/                       Design documents and ADRs
-  coda-v1-design.md         Full product design brief
-  coda-v1-branch-plan.md    Rewrite branch plan and milestones
-  coda-v1-slice-01-core-lifecycle.md  First implementation slice spec
   adr/0001-core-orchestration-model.md
   adr/0002-layouts-and-customization-model.md
   adr/0003-companion-utilities-boundary.md
   plugin-contracts/         Plugin API documentation (commands, hooks, providers, notifications, layouts)
+  archive/                  Historical design docs (shipped plans preserved for reference)
 ```
 
 ## Key Design Decisions
@@ -211,7 +209,7 @@ npm test
 This repository is on a **rewrite branch** (`coda-v1`). `main` is the stable production line; this branch is building the future canonical version.
 
 - Use `coda-dev` (not `coda`) when validating the rewrite alongside an existing `coda` installation — it uses `CODA_DEV_SESSION_PREFIX` to avoid session collisions.
-- The first proving slice is `docs/coda-v1-slice-01-core-lifecycle.md` — the core lifecycle spine.
+- The first proving slice is `docs/archive/coda-v1-slice-01-core-lifecycle.md` — the core lifecycle spine.
 - Do not expand adjacent utilities (bootstrap, auth, watcher) before the core lifecycle tests are green.
 - Do not merge rewrite work into `main` until the end-to-end core path is proven.
 

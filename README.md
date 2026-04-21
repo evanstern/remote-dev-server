@@ -918,9 +918,9 @@ coda/
 |-- man/
 |   \-- coda.1              Man page (installed to /usr/local/share/man/man1/)
 |-- docs/
-|   |-- coda-v1-design.md         Core design doc
-|   |-- coda-v1-branch-plan.md    Rewrite branch plan
-|   \-- adr/                      Architecture Decision Records
+|   |-- adr/                      Architecture Decision Records
+|   |-- plugin-contracts/         Plugin API contracts
+|   \-- archive/                  Historical design docs
 |-- tests/                  Shell lifecycle regression tests (bash, mock tmux/fzf)
 |-- test/                   Bats integration tests (module loading, functional)
 |-- scripts/

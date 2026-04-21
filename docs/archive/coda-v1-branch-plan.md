@@ -18,7 +18,7 @@ It does not restate the full product design. Instead, it answers the execution q
 
 Related documents:
 
-- `docs/coda-v1-design.md`
+- `docs/archive/coda-v1-design.md`
 - `docs/adr/0001-core-orchestration-model.md`
 - `docs/adr/0002-layouts-and-customization-model.md`
 - `docs/adr/0003-companion-utilities-boundary.md`
@@ -158,7 +158,7 @@ The first implementation slice should prove the core lifecycle before any deeper
 
 That slice is defined in:
 
-- `docs/coda-v1-slice-01-core-lifecycle.md`
+- `docs/archive/coda-v1-slice-01-core-lifecycle.md`
 
 ## Change Selection Rules
 
