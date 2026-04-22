@@ -35,7 +35,7 @@ func TestOpen_CreatesSchemaIdempotently(t *testing.T) {
 	}
 	defer d2.Close()
 
-	for _, table := range []string{"orchestrators", "features", "hook_events"} {
+	for _, table := range []string{"orchestrators", "features", "hook_events", "messages"} {
 		var name string
 		err := d2.QueryRow(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name=?",

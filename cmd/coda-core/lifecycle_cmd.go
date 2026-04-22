@@ -18,6 +18,7 @@ import (
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/hooks"
 	"github.com/evanstern/coda/internal/lifecycle"
+	"github.com/evanstern/coda/internal/messages"
 )
 
 const defaultLazyReconcileIntervalSecs = 10
@@ -131,11 +132,26 @@ func runStatus(args []string) error {
 	if err != nil {
 		return dbError(err)
 	}
+	msgMgr := messages.New(d, nil, nil)
+	unacked, err := msgMgr.UnackedCounts(ctx)
+	if err != nil {
+		return dbError(err)
+	}
+
+	orchNames := make([]string, 0, len(orchs))
+	for _, o := range orchs {
+		orchNames = append(orchNames, o.Name)
+	}
 
 	if *asJSON {
+		unackedJSON := make(map[string]int, len(orchNames))
+		for _, name := range orchNames {
+			unackedJSON[name] = unacked[name]
+		}
 		out := map[string]any{
 			"orchestrators": orchsToJSON(orchs),
 			"features":      featuresToJSON(feats),
+			"unacked":       unackedJSON,
 		}
 		return writeJSON(os.Stdout, out)
 	}
@@ -143,6 +159,8 @@ func runStatus(args []string) error {
 	printOrchTable(os.Stdout, orchs)
 	fmt.Fprintln(os.Stdout)
 	printFeatureTable(os.Stdout, feats)
+	fmt.Fprintln(os.Stdout)
+	printUnackedTable(os.Stdout, orchNames, unacked)
 	return nil
 }
 
