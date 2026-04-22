@@ -112,6 +112,10 @@ Callers MUST treat any non-zero exit as an error. Exit code 3 signals
 "user action required, do not retry" and is stable across v2 releases
 even though #148 does not yet emit it.
 
+Go callers in this repository can import the constants from
+`github.com/evanstern/coda/internal/codaexit`. External tooling should
+treat the values as stable — any change is a breaking v2-major bump.
+
 ## Build
 
 ```
