@@ -72,22 +72,24 @@ func Open(path string) (*sql.DB, error) {
 	// Single connection avoids WAL concurrency surprises in a CLI tool.
 	d.SetMaxOpenConns(1)
 
-	if _, err := d.Exec(schemaSQL); err != nil {
-		d.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
-	}
-
+	// Check schema_version BEFORE applying schema so a newer incoming DB
+	// can be refused cleanly instead of failing inside d.Exec. An empty
+	// or missing table means fresh install; apply schema unconditionally.
 	var dbVer int
-	if err := d.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&dbVer); err != nil {
-		d.Close()
-		return nil, fmt.Errorf("read schema_version: %w", err)
-	}
+	_ = d.QueryRow(
+		`SELECT COALESCE(MAX(version), 0) FROM schema_version`,
+	).Scan(&dbVer)
 	if dbVer > SchemaVersion {
 		d.Close()
 		return nil, fmt.Errorf(
 			"coda.db schema version %d is newer than this coda-core (supports up to %d). Upgrade coda-core or use an older DB.",
 			dbVer, SchemaVersion,
 		)
+	}
+
+	if _, err := d.Exec(schemaSQL); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
 	return d, nil
