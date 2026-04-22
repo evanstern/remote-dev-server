@@ -287,13 +287,17 @@ mkdir -p "$HOME/.config/coda/plugins"
 mkdir -p "$HOME/.local/bin"
 ok "$PROJECTS_DIR, ~/.config/coda/{layouts,profiles,hooks,providers,notifications,plugins}"
 
-# v2 state home + hook scaffolding (separate from v1 ~/.config/coda/hooks)
+# v2 state home + hook scaffolding (separate from v1 ~/.config/coda/hooks).
+# Enforce 0700 to match internal/db.Open which creates the DB parent with
+# 0700; the SQLite state store and hook payloads must not be world-readable.
 _coda_v2_home="${CODA_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/coda}"
 mkdir -p "$_coda_v2_home/hooks"
+chmod 700 "$_coda_v2_home" "$_coda_v2_home/hooks"
 for _ev in post-orchestrator-start post-orchestrator-stop post-feature-spawn pre-feature-teardown; do
     mkdir -p "$_coda_v2_home/hooks/$_ev"
+    chmod 700 "$_coda_v2_home/hooks/$_ev"
 done
-ok "$_coda_v2_home/hooks/{post-orchestrator-start,post-orchestrator-stop,post-feature-spawn,pre-feature-teardown} (v2)"
+ok "$_coda_v2_home/hooks/{post-orchestrator-start,post-orchestrator-stop,post-feature-spawn,pre-feature-teardown} (v2, 0700)"
 
 # ===========================================================================
 # Done

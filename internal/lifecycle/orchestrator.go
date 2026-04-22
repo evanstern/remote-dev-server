@@ -1,7 +1,7 @@
 // Package lifecycle implements v2 orchestrator and feature state
-// transitions backed by the SQLite store. This package is state-only: it
-// records transitions and fires hooks. Actual tmux / opencode process
-// lifecycle is still owned by the bash wrapper in this card.
+// transitions backed by the SQLite store. This package is state-only:
+// it records transitions and fires hooks. Actual tmux and opencode
+// process lifecycle is managed by the bash wrapper outside this package.
 package lifecycle
 
 import (
