@@ -152,20 +152,13 @@ func runDrain(args []string) error {
 	}
 	defer d.Close()
 
-	var pending int
-	if err := d.QueryRow(
-		`SELECT COUNT(*) FROM messages WHERE recipient=? AND delivered_at IS NULL`,
-		*recipient).Scan(&pending); err != nil {
-		return dbError(err)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	n, err := mgr.Drain(ctx, *recipient)
 	if err != nil {
 		return dbError(err)
 	}
-	fmt.Printf("drained %d of %d messages\n", n, pending)
+	fmt.Printf("drained %d messages\n", n)
 	return nil
 }
 
@@ -227,14 +220,26 @@ func previewBody(body string) string {
 	return flat
 }
 
+// printUnackedTable renders unacked message counts for the live
+// orchestrators in orchs. Only orchestrators with count > 0 are
+// shown; zero rows are noise. Messages addressed to recipients not
+// in orchs (deleted or unknown orchestrators) are intentionally not
+// surfaced here — they remain readable via
+// `coda-core recv --recipient <name>`.
 func printUnackedTable(w io.Writer, orchs []string, unacked map[string]int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "RECIPIENT\tUNACKED")
+	any := false
 	for _, name := range orchs {
-		fmt.Fprintf(tw, "%s\t%d\n", name, unacked[name])
+		n := unacked[name]
+		if n == 0 {
+			continue
+		}
+		fmt.Fprintf(tw, "%s\t%d\n", name, n)
+		any = true
 	}
-	if len(orchs) == 0 {
-		fmt.Fprintln(tw, "(no orchestrators)")
+	if !any {
+		return
 	}
 	tw.Flush()
 }

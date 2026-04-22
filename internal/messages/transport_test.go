@@ -82,12 +82,44 @@ func TestHTTPTransport_TimeoutIsError(t *testing.T) {
 }
 
 func TestHTTPTransport_RejectsEmptyCoords(t *testing.T) {
-	tr := NewHTTPTransport()
-	if err := tr.Deliver(context.Background(), 0, "ses", "hi"); err == nil {
-		t.Fatal("want error for port=0")
+	cases := []struct {
+		name      string
+		port      int
+		sessionID string
+	}{
+		{"port=0", 0, "ses"},
+		{"port=-1", -1, "ses"},
+		{"port=99999", 99999, "ses"},
+		{"empty sessionID", 4096, ""},
 	}
-	if err := tr.Deliver(context.Background(), 4096, "", "hi"); err == nil {
-		t.Fatal("want error for empty sessionID")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tr := NewHTTPTransport()
+			if err := tr.Deliver(context.Background(), c.port, c.sessionID, "hi"); err == nil {
+				t.Fatalf("want error for %s", c.name)
+			}
+		})
+	}
+}
+
+func TestHTTPTransport_PathEscapesSessionID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	_, port := hostPort(t, srv.URL)
+	tr := newTestHTTPTransport(2 * time.Second)
+	tr.Client.Transport = rewriteLoopback(t, srv.URL)
+
+	if err := tr.Deliver(context.Background(), port, "abc/def", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	want := "/session/abc%2Fdef/message"
+	if gotPath != want {
+		t.Fatalf("escaped path = %q, want %q", gotPath, want)
 	}
 }
 
@@ -120,9 +152,13 @@ func TestHTTPTransport_SendsCorrectBody(t *testing.T) {
 	}
 }
 
-// rewriteLoopback lets tests hit httptest.Server even though the
-// transport hardcodes 127.0.0.1. It rewrites the URL target host
-// to the httptest server host at the round-trip layer.
+// rewriteLoopback is a test-only RoundTripper that redirects
+// requests to 127.0.0.1:<any> over to the httptest.Server host.
+// HTTPTransport.Deliver hardcodes 127.0.0.1 because the v2 bus is
+// single-host by design (cross-host delivery is out of scope for
+// v2; see Deliver's doc comment). To exercise the real Deliver
+// codepath in tests without binding httptest.Server to the
+// hardcoded port, we swap the Host at the transport layer.
 func rewriteLoopback(t *testing.T, srvURL string) http.RoundTripper {
 	t.Helper()
 	target, err := url.Parse(srvURL)

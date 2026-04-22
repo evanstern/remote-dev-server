@@ -159,8 +159,17 @@ func runStatus(args []string) error {
 	printOrchTable(os.Stdout, orchs)
 	fmt.Fprintln(os.Stdout)
 	printFeatureTable(os.Stdout, feats)
-	fmt.Fprintln(os.Stdout)
-	printUnackedTable(os.Stdout, orchNames, unacked)
+	hasUnacked := false
+	for _, o := range orchs {
+		if unacked[o.Name] > 0 {
+			hasUnacked = true
+			break
+		}
+	}
+	if hasUnacked {
+		fmt.Fprintln(os.Stdout)
+		printUnackedTable(os.Stdout, orchNames, unacked)
+	}
 	return nil
 }
 

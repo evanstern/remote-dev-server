@@ -29,6 +29,10 @@ const (
 // BroadcastRecipient is the sentinel recipient value that stores the
 // message but skips the delivery attempt. Real broadcast fan-out is
 // parked (design doc §Open questions §1).
+//
+// Reserved: do NOT register an orchestrator with this name. An
+// orchestrator named "broadcast" would have messages stored but
+// never delivered, because Send short-circuits on this literal.
 const BroadcastRecipient = "broadcast"
 
 // MaxBodyBytes caps the stored body size per design doc §Open
@@ -182,19 +186,33 @@ func (m *Manager) Send(ctx context.Context, sender, recipient string, t Type, bo
 		return msg, nil
 	}
 
+	deliveredAt := m.now()
 	if _, err := m.DB.ExecContext(ctx,
-		`UPDATE messages SET delivered_at=? WHERE id=?`, now, id); err != nil {
+		`UPDATE messages SET delivered_at=? WHERE id=?`, deliveredAt, id); err != nil {
 		return nil, err
 	}
-	msg.DeliveredAt = sql.NullInt64{Int64: now, Valid: true}
+	msg.DeliveredAt = sql.NullInt64{Int64: deliveredAt, Valid: true}
 	return msg, nil
 }
 
 // Drain delivers all undelivered messages for recipient in created_at
 // order. It stops at the first delivery failure so ordering is
-// preserved across restarts. Returns (delivered_count, error). A
-// transport failure is NOT propagated as an error — the caller logs
-// and moves on.
+// preserved across restarts. Returns (delivered_count, error).
+//
+// Semantics:
+//   - (0, nil)        nothing pending, OR first message failed delivery
+//     (indistinguishable in the return value; check stderr
+//     for the failure log, or observe delivered_at in the
+//     DB to tell them apart)
+//   - (n>0, nil)      n messages delivered; may have stopped early on a
+//     later failure
+//   - (n, err)        DB error during scan or UPDATE; n messages up to
+//     that point were delivered
+//
+// A transport-level delivery failure is NOT propagated as an error
+// (the design calls for fire-and-forget; Drain logs to stderr and
+// returns the count of successes). A future DrainResult struct may
+// make this distinguishable if callers need it.
 func (m *Manager) Drain(ctx context.Context, recipient string) (int, error) {
 	if m.Orchs == nil || m.Transport == nil {
 		return 0, nil
@@ -210,44 +228,68 @@ func (m *Manager) Drain(ctx context.Context, recipient string) (int, error) {
 		return 0, nil
 	}
 
+	const chunk = 64
+	delivered := 0
+	var lastID int64 = 0
+
+	for {
+		batch, err := m.fetchPendingBatch(ctx, recipient, lastID, chunk)
+		if err != nil {
+			return delivered, err
+		}
+		if len(batch) == 0 {
+			return delivered, nil
+		}
+		for _, msg := range batch {
+			if err := m.Transport.Deliver(ctx, port, sessionID, renderDelivery(msg)); err != nil {
+				fmt.Fprintf(os.Stderr, "messages: drain id=%d to %q failed: %v\n", msg.ID, recipient, err)
+				return delivered, nil
+			}
+			deliveredAt := m.now()
+			if _, err := m.DB.ExecContext(ctx,
+				`UPDATE messages SET delivered_at=? WHERE id=?`, deliveredAt, msg.ID); err != nil {
+				return delivered, err
+			}
+			msg.DeliveredAt = sql.NullInt64{Int64: deliveredAt, Valid: true}
+			delivered++
+			lastID = msg.ID
+		}
+		if len(batch) < chunk {
+			return delivered, nil
+		}
+	}
+}
+
+// fetchPendingBatch returns up to limit undelivered messages for
+// recipient with id > afterID, ordered by (created_at, id). Rows
+// are fully drained and closed before returning, so the caller
+// can safely run ExecContext afterward on the same connection.
+func (m *Manager) fetchPendingBatch(ctx context.Context, recipient string, afterID int64, limit int) ([]*Message, error) {
 	rows, err := m.DB.QueryContext(ctx,
 		`SELECT id, sender, recipient, type, body, parent_id, created_at, delivered_at, acked_at
 		 FROM messages
-		 WHERE recipient=? AND delivered_at IS NULL
-		 ORDER BY created_at ASC, id ASC`, recipient)
+		 WHERE recipient=? AND delivered_at IS NULL AND id > ?
+		 ORDER BY created_at ASC, id ASC
+		 LIMIT ?`, recipient, afterID, limit)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	var pending []*Message
+	defer rows.Close()
+	var out []*Message
 	for rows.Next() {
 		msg := &Message{}
 		var typ string
 		if err := rows.Scan(&msg.ID, &msg.Sender, &msg.Recipient, &typ, &msg.Body,
 			&msg.ParentID, &msg.CreatedAt, &msg.DeliveredAt, &msg.AckedAt); err != nil {
-			rows.Close()
-			return 0, err
+			return nil, err
 		}
 		msg.Type = Type(typ)
-		pending = append(pending, msg)
+		out = append(out, msg)
 	}
-	if err := rows.Close(); err != nil {
-		return 0, err
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-
-	delivered := 0
-	for _, msg := range pending {
-		if err := m.Transport.Deliver(ctx, port, sessionID, renderDelivery(msg)); err != nil {
-			fmt.Fprintf(os.Stderr, "messages: drain id=%d to %q failed: %v\n", msg.ID, recipient, err)
-			return delivered, nil
-		}
-		now := m.now()
-		if _, err := m.DB.ExecContext(ctx,
-			`UPDATE messages SET delivered_at=? WHERE id=?`, now, msg.ID); err != nil {
-			return delivered, err
-		}
-		delivered++
-	}
-	return delivered, nil
+	return out, nil
 }
 
 // Recv returns messages for recipient, newest first, limited to limit
@@ -330,9 +372,21 @@ func (m *Manager) UnackedCounts(ctx context.Context) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-// renderDelivery formats a message for HTTP delivery: a one-line
-// header ([message type=... id=... from=...]) followed by the raw
-// JSON body on line 2. Shared by Send and Drain.
+// renderDelivery formats a message for HTTP delivery. The receiving
+// opencode session HTTP endpoint accepts {"text": "<string>"} and
+// renders that string verbatim into the agent's conversation on the
+// next turn.
+//
+// Wire format:
+//
+//	[message type=<type> id=<N> from=<sender>]\n<body-json-one-line>
+//
+// The single-line header lets the receiving agent detect bus messages
+// structurally. Internal newlines in the body are replaced with spaces
+// so the header stays on line 1; the body is otherwise passed through
+// as raw JSON. This is the v1 compatibility wire format — a structured
+// message type (opencode side) is a #149 follow-up. If opencode ever
+// changes how the text field is rendered, adjust here.
 func renderDelivery(msg *Message) string {
 	body := strings.ReplaceAll(msg.Body, "\n", " ")
 	return fmt.Sprintf("[message type=%s id=%d from=%s]\n%s",

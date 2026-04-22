@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -22,14 +23,29 @@ func NewHTTPTransport() *HTTPTransport {
 
 // Deliver POSTs a text message to http://127.0.0.1:<port>/session/<id>/message
 // with body {"text":"<text>"}. Returns error on non-2xx, missing
-// coordinates, or transport failure.
+// coordinates, invalid port, or transport failure.
+//
+// Delivery is loopback-only by design: the v2 message bus is a
+// single-host system and only talks to orchestrator sessions on
+// 127.0.0.1. Cross-host delivery is explicitly out of scope for v2.
 func (h *HTTPTransport) Deliver(ctx context.Context, port int, sessionID, text string) error {
-	if port == 0 || sessionID == "" {
-		return fmt.Errorf("missing port or session_id")
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("invalid port %d", port)
 	}
-	url := fmt.Sprintf("http://127.0.0.1:%d/session/%s/message", port, sessionID)
-	payload, _ := json.Marshal(map[string]string{"text": text})
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	if sessionID == "" {
+		return fmt.Errorf("missing session_id")
+	}
+	u := &url.URL{
+		Scheme:  "http",
+		Host:    fmt.Sprintf("127.0.0.1:%d", port),
+		Path:    "/session/" + sessionID + "/message",
+		RawPath: "/session/" + url.PathEscape(sessionID) + "/message",
+	}
+	payload, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

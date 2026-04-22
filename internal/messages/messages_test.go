@@ -361,6 +361,61 @@ func TestDrain_StopsAtFirstFailure(t *testing.T) {
 	}
 }
 
+func TestDrain_StreamsLargeBacklog(t *testing.T) {
+	tr := &stubTransport{}
+	orchs := &stubOrchs{port: 4096, sessionID: "ses1", running: true}
+	m, d := newTestManager(t, tr, orchs)
+
+	const total = 130
+	ids := make([]int64, 0, total)
+	for i := 0; i < total; i++ {
+		id := seedMessage(t, d, "ash", "zach", int64(1000+i), false)
+		ids = append(ids, id)
+	}
+
+	n, err := m.Drain(context.Background(), "zach")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != total {
+		t.Fatalf("drained %d, want %d", n, total)
+	}
+	if len(tr.calls) != total {
+		t.Fatalf("transport calls = %d, want %d", len(tr.calls), total)
+	}
+
+	var got []int64
+	for _, call := range tr.calls {
+		for _, token := range strings.Split(call.Text, " ") {
+			if strings.HasPrefix(token, "id=") {
+				var n int64
+				if _, err := fmt.Sscanf(token, "id=%d", &n); err != nil {
+					t.Fatal(err)
+				}
+				got = append(got, n)
+			}
+		}
+	}
+	if len(got) != total {
+		t.Fatalf("parsed ids = %d, want %d", len(got), total)
+	}
+	for i, id := range got {
+		if id != ids[i] {
+			t.Fatalf("drain order[%d] = %d, want %d", i, id, ids[i])
+		}
+	}
+
+	var remaining int
+	if err := d.QueryRow(
+		`SELECT COUNT(*) FROM messages WHERE recipient='zach' AND delivered_at IS NULL`,
+	).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Fatalf("remaining undelivered = %d, want 0", remaining)
+	}
+}
+
 func TestDrain_NoopWhenOrchNotRunning(t *testing.T) {
 	tr := &stubTransport{}
 	orchs := &stubOrchs{running: false}
