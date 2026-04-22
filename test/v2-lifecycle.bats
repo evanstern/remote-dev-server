@@ -155,6 +155,60 @@ SENTINEL
     [[ "$output" != *"UNEXPECTED_CODA_CORE_INVOCATION"* ]]
 }
 
+@test "v2: orchestrator reconcile on empty DB prints 'no rows'" {
+    run "$CODA_CORE_BIN" orchestrator reconcile
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"no rows transitioned"* ]]
+}
+
+backdate_orch() {
+    command -v sqlite3 >/dev/null || skip "sqlite3 CLI not installed"
+    sqlite3 "$CODA_HOME/coda.db" "UPDATE orchestrators SET updated_at = updated_at - 120 WHERE name='$1';"
+}
+
+@test "v2: reconcile flips a running row to stale when tmux session gone" {
+    "$CODA_CORE_BIN" orchestrator new zeta --config-dir /tmp/zeta
+    "$CODA_CORE_BIN" orchestrator start zeta --tmux-session coda-orch--zeta-ghost --pid 999999
+    backdate_orch zeta
+
+    run "$CODA_CORE_BIN" orchestrator reconcile
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"stale"* ]]
+
+    run "$CODA_CORE_BIN" orchestrator ls
+    [[ "$output" == *"stale"* ]]
+}
+
+@test "v2: CODA_NO_AUTO_RECONCILE=1 disables lazy reconcile on ls" {
+    "$CODA_CORE_BIN" orchestrator new lazy --config-dir /tmp/lazy
+    "$CODA_CORE_BIN" orchestrator start lazy --tmux-session coda-orch--lazy-ghost --pid 999998
+    backdate_orch lazy
+
+    CODA_NO_AUTO_RECONCILE=1 run "$CODA_CORE_BIN" orchestrator ls
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running"* ]]
+    [[ "$output" != *"stale"* ]]
+
+    run "$CODA_CORE_BIN" orchestrator ls
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"stale"* ]]
+}
+
+@test "v2: start from stale succeeds and clears stale_reason" {
+    "$CODA_CORE_BIN" orchestrator new restart --config-dir /tmp/restart
+    "$CODA_CORE_BIN" orchestrator start restart --tmux-session coda-orch--restart-ghost --pid 999997
+    backdate_orch restart
+    "$CODA_CORE_BIN" orchestrator reconcile >/dev/null
+
+    run "$CODA_CORE_BIN" orchestrator start restart --tmux-session coda-orch--restart --pid 1234
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"running"* ]]
+
+    run "$CODA_CORE_BIN" orchestrator ls --json
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"stale_reason"* ]]
+}
+
 @test "v2 routing: bash coda feature spawn routes to coda-core" {
     "$CODA_CORE_BIN" orchestrator new spawner --config-dir /tmp/x
 

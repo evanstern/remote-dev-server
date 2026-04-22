@@ -9,14 +9,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/evanstern/coda/internal/codaexit"
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/hooks"
 	"github.com/evanstern/coda/internal/lifecycle"
 )
+
+const defaultLazyReconcileIntervalSecs = 10
 
 const codaCoreVersion = "0.1.0-dev"
 
@@ -118,6 +122,7 @@ func runStatus(args []string) error {
 	defer d.Close()
 
 	ctx := context.Background()
+	maybeLazyReconcile(ctx, mgr)
 	orchs, err := mgr.ListOrchestrators(ctx)
 	if err != nil {
 		return dbError(err)
@@ -143,7 +148,7 @@ func runStatus(args []string) error {
 
 func runOrchestrator(args []string) error {
 	if len(args) == 0 {
-		return userError("usage: coda-core orchestrator <new|start|stop|ls|rm> ...")
+		return userError("usage: coda-core orchestrator <new|start|stop|ls|rm|reconcile> ...")
 	}
 	switch args[0] {
 	case "new":
@@ -156,6 +161,8 @@ func runOrchestrator(args []string) error {
 		return orchLs(args[1:])
 	case "rm":
 		return orchRm(args[1:])
+	case "reconcile":
+		return orchReconcile(args[1:])
 	default:
 		return userError("unknown orchestrator subcommand: %s", args[0])
 	}
@@ -254,7 +261,9 @@ func orchLs(args []string) error {
 	}
 	defer d.Close()
 
-	orchs, err := mgr.ListOrchestrators(context.Background())
+	ctx := context.Background()
+	maybeLazyReconcile(ctx, mgr)
+	orchs, err := mgr.ListOrchestrators(ctx)
 	if err != nil {
 		return dbError(err)
 	}
@@ -263,6 +272,93 @@ func orchLs(args []string) error {
 	}
 	printOrchTable(os.Stdout, orchs)
 	return nil
+}
+
+func orchReconcile(args []string) error {
+	fs := flag.NewFlagSet("orchestrator reconcile", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "emit JSON")
+	if err := parseInterleaved(fs, args); err != nil {
+		return userError("%v", err)
+	}
+	if fs.NArg() > 1 {
+		return userError("usage: coda-core orchestrator reconcile [<name>] [--json]")
+	}
+	name := ""
+	if fs.NArg() == 1 {
+		name = fs.Arg(0)
+	}
+
+	d, mgr, _, err := openManager()
+	if err != nil {
+		return dbError(err)
+	}
+	defer d.Close()
+
+	results, err := mgr.Reconcile(context.Background(), name)
+	if err != nil {
+		return dbError(err)
+	}
+	if *asJSON {
+		if results == nil {
+			results = []lifecycle.ReconcileResult{}
+		}
+		return writeJSON(os.Stdout, results)
+	}
+	printReconcileResults(os.Stdout, results)
+	return nil
+}
+
+func printReconcileResults(w io.Writer, results []lifecycle.ReconcileResult) {
+	if len(results) == 0 {
+		fmt.Fprintln(w, "no rows transitioned")
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "KIND\tNAME\tORCH\tFROM\tTO\tREASON")
+	for _, r := range results {
+		orch := r.Orch
+		if orch == "" {
+			orch = "-"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			r.Kind, r.Name, orch, r.PreviousSt, r.NewState, r.StaleReason)
+	}
+	tw.Flush()
+}
+
+// maybeLazyReconcile runs a best-effort reconcile pass unless the user
+// disabled it with CODA_NO_AUTO_RECONCILE=1. A reconciler_state row
+// serializes runs across invocations: a pass is skipped if the last
+// run completed less than CODA_RECONCILE_MIN_INTERVAL_SECS ago (default
+// 10s). Explicit `orchestrator reconcile` bypasses this rate-limit.
+// Errors are silently ignored so read-only commands like ls/status
+// stay usable when the prober can't run.
+func maybeLazyReconcile(ctx context.Context, mgr *lifecycle.Manager) {
+	if os.Getenv("CODA_NO_AUTO_RECONCILE") == "1" {
+		return
+	}
+
+	intervalSecs := int64(defaultLazyReconcileIntervalSecs)
+	if v := os.Getenv("CODA_RECONCILE_MIN_INTERVAL_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			intervalSecs = int64(n)
+		}
+	}
+
+	var lastRun int64
+	_ = mgr.DB.QueryRowContext(ctx,
+		`SELECT last_run_at FROM reconciler_state WHERE id=1`).Scan(&lastRun)
+
+	now := time.Now().Unix()
+	if now-lastRun < intervalSecs {
+		return
+	}
+
+	if _, err := mgr.Reconcile(ctx, ""); err != nil {
+		return
+	}
+	_, _ = mgr.DB.ExecContext(ctx,
+		`UPDATE reconciler_state SET last_run_at=? WHERE id=1`, now)
 }
 
 func orchRm(args []string) error {
@@ -436,6 +532,9 @@ func orchsToJSON(orchs []*lifecycle.Orchestrator) []map[string]any {
 		if o.StartedAt.Valid {
 			m["started_at"] = o.StartedAt.Int64
 		}
+		if o.StaleReason.Valid {
+			m["stale_reason"] = o.StaleReason.String
+		}
 		out = append(out, m)
 	}
 	return out
@@ -465,6 +564,9 @@ func featuresToJSON(feats []*lifecycle.Feature) []map[string]any {
 		}
 		if f.EndedAt.Valid {
 			m["ended_at"] = f.EndedAt.Int64
+		}
+		if f.StaleReason.Valid {
+			m["stale_reason"] = f.StaleReason.String
 		}
 		out = append(out, m)
 	}
