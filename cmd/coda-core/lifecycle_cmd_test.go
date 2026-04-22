@@ -42,7 +42,7 @@ func seedProbeCandidate(t *testing.T, mgr *lifecycle.Manager) {
 	if _, err := mgr.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mgr.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 1111); err != nil {
+	if _, err := mgr.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 1111); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mgr.DB.ExecContext(ctx,
