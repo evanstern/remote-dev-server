@@ -68,6 +68,7 @@ v2 lifecycle (SQLite-backed):
   orchestrator stop    Mark orchestrator stopped
   orchestrator ls      List orchestrators
   orchestrator rm      Remove an orchestrator
+  orchestrator reconcile  Detect stale orchestrators (and features) via tmux/pid probes
   feature spawn        Register a feature (state=spawning)
   feature ls           List features
   feature attach       Mark feature running

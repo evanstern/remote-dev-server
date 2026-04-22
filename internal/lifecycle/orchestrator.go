@@ -19,6 +19,7 @@ const (
 	StateStarting  = "starting"
 	StateRunning   = "running"
 	StateStopping  = "stopping"
+	StateStale     = "stale"
 	StateSpawning  = "spawning"
 	StateReporting = "reporting"
 	StateDone      = "done"
@@ -40,6 +41,7 @@ type Orchestrator struct {
 	Port        sql.NullInt64
 	PID         sql.NullInt64
 	StartedAt   sql.NullInt64
+	StaleReason sql.NullString
 	CreatedAt   int64
 	UpdatedAt   int64
 }
@@ -56,6 +58,7 @@ type Feature struct {
 	State          string
 	BriefPath      sql.NullString
 	PRURL          sql.NullString
+	StaleReason    sql.NullString
 	CreatedAt      int64
 	UpdatedAt      int64
 	EndedAt        sql.NullInt64
@@ -68,9 +71,10 @@ type HookFirer interface {
 
 // Manager is the stateful operations surface used by the CLI commands.
 type Manager struct {
-	DB    *sql.DB
-	Hooks HookFirer
-	Now   func() time.Time
+	DB     *sql.DB
+	Hooks  HookFirer
+	Now    func() time.Time
+	prober Prober
 }
 
 // New constructs a Manager. A nil hooks dispatcher disables hook firing.
@@ -106,14 +110,14 @@ func (m *Manager) StartOrchestrator(ctx context.Context, name string, tmuxSessio
 	now := m.now()
 	res, err := m.DB.ExecContext(ctx,
 		`UPDATE orchestrators
-		 SET state=?, tmux_session=?, port=?, pid=?, started_at=?, updated_at=?
-		 WHERE name=?`,
+		 SET state=?, tmux_session=?, port=?, pid=?, started_at=?, stale_reason=NULL, updated_at=?
+		 WHERE name=? AND state IN ('stopped','stale')`,
 		StateRunning, nullStr(tmuxSession), nullInt(int64(port)), nullInt(int64(pid)), now, now, name)
 	if err != nil {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, fmt.Errorf("%w: orchestrator %q", ErrNotFound, name)
+		return nil, fmt.Errorf("%w: orchestrator %q (not in stopped|stale)", ErrNotFound, name)
 	}
 	o, err := m.GetOrchestrator(ctx, name)
 	if err != nil {
@@ -157,11 +161,11 @@ func (m *Manager) StopOrchestrator(ctx context.Context, name string) (*Orchestra
 // GetOrchestrator fetches one row by name.
 func (m *Manager) GetOrchestrator(ctx context.Context, name string) (*Orchestrator, error) {
 	row := m.DB.QueryRowContext(ctx,
-		`SELECT id, name, config_dir, state, tmux_session, port, pid, started_at, created_at, updated_at
+		`SELECT id, name, config_dir, state, tmux_session, port, pid, started_at, stale_reason, created_at, updated_at
 		 FROM orchestrators WHERE name=?`, name)
 	o := &Orchestrator{}
 	err := row.Scan(&o.ID, &o.Name, &o.ConfigDir, &o.State, &o.TmuxSession,
-		&o.Port, &o.PID, &o.StartedAt, &o.CreatedAt, &o.UpdatedAt)
+		&o.Port, &o.PID, &o.StartedAt, &o.StaleReason, &o.CreatedAt, &o.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: orchestrator %q", ErrNotFound, name)
 	}
@@ -171,7 +175,7 @@ func (m *Manager) GetOrchestrator(ctx context.Context, name string) (*Orchestrat
 // ListOrchestrators returns all rows ordered by name.
 func (m *Manager) ListOrchestrators(ctx context.Context) ([]*Orchestrator, error) {
 	rows, err := m.DB.QueryContext(ctx,
-		`SELECT id, name, config_dir, state, tmux_session, port, pid, started_at, created_at, updated_at
+		`SELECT id, name, config_dir, state, tmux_session, port, pid, started_at, stale_reason, created_at, updated_at
 		 FROM orchestrators ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -181,7 +185,7 @@ func (m *Manager) ListOrchestrators(ctx context.Context) ([]*Orchestrator, error
 	for rows.Next() {
 		o := &Orchestrator{}
 		if err := rows.Scan(&o.ID, &o.Name, &o.ConfigDir, &o.State, &o.TmuxSession,
-			&o.Port, &o.PID, &o.StartedAt, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			&o.Port, &o.PID, &o.StartedAt, &o.StaleReason, &o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -215,6 +219,9 @@ func orchPayload(o *Orchestrator) map[string]any {
 	}
 	if o.PID.Valid {
 		p["pid"] = o.PID.Int64
+	}
+	if o.StaleReason.Valid {
+		p["stale_reason"] = o.StaleReason.String
 	}
 	return map[string]any{"orchestrator": p}
 }

@@ -113,14 +113,14 @@ func (m *Manager) FinishFeature(ctx context.Context, orchName, name string) (*Fe
 func (m *Manager) GetFeature(ctx context.Context, orchName, name string) (*Feature, error) {
 	row := m.DB.QueryRowContext(ctx,
 		`SELECT f.id, f.name, f.orchestrator_id, f.project, f.branch, f.worktree_dir,
-		        f.tmux_session, f.state, f.brief_path, f.pr_url,
+		        f.tmux_session, f.state, f.brief_path, f.pr_url, f.stale_reason,
 		        f.created_at, f.updated_at, f.ended_at
 		 FROM features f
 		 JOIN orchestrators o ON o.id = f.orchestrator_id
 		 WHERE o.name=? AND f.name=?`, orchName, name)
 	f := &Feature{}
 	err := row.Scan(&f.ID, &f.Name, &f.OrchestratorID, &f.Project, &f.Branch,
-		&f.WorktreeDir, &f.TmuxSession, &f.State, &f.BriefPath, &f.PRURL,
+		&f.WorktreeDir, &f.TmuxSession, &f.State, &f.BriefPath, &f.PRURL, &f.StaleReason,
 		&f.CreatedAt, &f.UpdatedAt, &f.EndedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: feature %q on orchestrator %q", ErrNotFound, name, orchName)
@@ -137,13 +137,13 @@ func (m *Manager) ListFeatures(ctx context.Context, orchName string) ([]*Feature
 	if orchName == "" {
 		rows, err = m.DB.QueryContext(ctx,
 			`SELECT id, name, orchestrator_id, project, branch, worktree_dir,
-			        tmux_session, state, brief_path, pr_url,
+			        tmux_session, state, brief_path, pr_url, stale_reason,
 			        created_at, updated_at, ended_at
 			 FROM features ORDER BY orchestrator_id, name`)
 	} else {
 		rows, err = m.DB.QueryContext(ctx,
 			`SELECT f.id, f.name, f.orchestrator_id, f.project, f.branch, f.worktree_dir,
-			        f.tmux_session, f.state, f.brief_path, f.pr_url,
+			        f.tmux_session, f.state, f.brief_path, f.pr_url, f.stale_reason,
 			        f.created_at, f.updated_at, f.ended_at
 			 FROM features f JOIN orchestrators o ON o.id=f.orchestrator_id
 			 WHERE o.name=? ORDER BY f.name`, orchName)
@@ -156,7 +156,7 @@ func (m *Manager) ListFeatures(ctx context.Context, orchName string) ([]*Feature
 	for rows.Next() {
 		f := &Feature{}
 		if err := rows.Scan(&f.ID, &f.Name, &f.OrchestratorID, &f.Project, &f.Branch,
-			&f.WorktreeDir, &f.TmuxSession, &f.State, &f.BriefPath, &f.PRURL,
+			&f.WorktreeDir, &f.TmuxSession, &f.State, &f.BriefPath, &f.PRURL, &f.StaleReason,
 			&f.CreatedAt, &f.UpdatedAt, &f.EndedAt); err != nil {
 			return nil, err
 		}
@@ -179,6 +179,9 @@ func featurePayload(f *Feature, orch *Orchestrator) map[string]any {
 	}
 	if f.TmuxSession.Valid {
 		p["tmux_session"] = f.TmuxSession.String
+	}
+	if f.StaleReason.Valid {
+		p["stale_reason"] = f.StaleReason.String
 	}
 	return map[string]any{"feature": p}
 }

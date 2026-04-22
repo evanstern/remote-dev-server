@@ -73,6 +73,8 @@ Events implemented by `coda-core`:
 
 - `post-orchestrator-start`
 - `post-orchestrator-stop`
+- `post-orchestrator-stale` — fires when `Reconcile` transitions an
+  orchestrator to `stale` (see "Reconciliation" below).
 - `post-feature-spawn`
 - `pre-feature-teardown` — fires **before** the row is marked `done`, so
   hooks observing the DB see state=`running`.
@@ -97,6 +99,66 @@ binding contract for plugin authors.
 Exit codes from hooks are recorded in `hook_events.exit_code`. A
 fatal-hook block surfaces to the caller as coda-core exit code 3
 (reserved; see Exit codes below).
+
+## Reconciliation
+
+`coda-core` does not supervise orchestrator or feature processes. When a
+row is written as `state=running`, nothing automatically detects that
+the tmux session was later killed or the process crashed. The
+**reconciler** closes that gap by probing tmux and pid liveness and
+transitioning dead rows to a terminal state.
+
+State vocabulary:
+
+- `orchestrators.state = 'stale'` — row was `starting|running|stopping`
+  but its `tmux_session` or `pid` no longer exists. Set by the
+  reconciler; cleared when the operator calls `orchestrator start`.
+- `features.state = 'failed'` — row was `spawning|running|reporting`
+  but its `tmux_session` no longer exists. `failed` is terminal.
+
+Each transition also populates a `stale_reason` column (a short string
+like `tmux session "coda-orch--alice" gone` or `pid 12345 not alive`).
+
+### Invocation
+
+Explicit:
+
+```
+coda-core orchestrator reconcile            # check all candidate rows
+coda-core orchestrator reconcile alice      # check only alice (+ its features)
+coda-core orchestrator reconcile --json     # machine-readable output
+```
+
+Lazy: `coda-core orchestrator ls` and `coda-core status` run a
+best-effort reconcile pass before rendering. Set
+`CODA_NO_AUTO_RECONCILE=1` to disable.
+
+### Freshness window
+
+Rows updated within the last 30 seconds are skipped to avoid racing
+in-flight `StartOrchestrator` transitions where `pid`/`tmux_session` are
+recorded before the child has fully forked.
+
+### Liveness signals
+
+- Orchestrators: `tmux has-session -t <name>` and either `/proc/<pid>/status`
+  (Linux, zombie-aware) or `kill(pid, 0)` fallback.
+- Features: tmux session only. `session_id` liveness is a message-bus
+  (#149) concern and is deliberately out of scope here.
+
+The reconciler is observational. It updates DB rows and fires the
+`post-orchestrator-stale` hook; it never kills tmux sessions or pids.
+Filesystem cleanup remains a v1 `coda feature done/finish` responsibility.
+
+### Restart from stale
+
+`StartOrchestrator` accepts rows in `stopped` or `stale` state. On a
+successful start transition, `stale_reason` is cleared automatically.
+
+### Exit codes for `reconcile`
+
+Reconcile uses 0/1/2 (success / user error / DB error). It does **not**
+emit exit code 3: reconciliation is not a lifecycle-blocked transition.
 
 ## Exit codes (coda-core)
 

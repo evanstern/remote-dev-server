@@ -25,6 +25,7 @@ type Event string
 const (
 	EventPostOrchestratorStart Event = "post-orchestrator-start"
 	EventPostOrchestratorStop  Event = "post-orchestrator-stop"
+	EventPostOrchestratorStale Event = "post-orchestrator-stale"
 	EventPostFeatureSpawn      Event = "post-feature-spawn"
 	EventPreFeatureTeardown    Event = "pre-feature-teardown"
 )
