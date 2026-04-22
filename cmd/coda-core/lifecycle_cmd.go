@@ -12,20 +12,13 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/evanstern/coda/internal/codaexit"
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/hooks"
 	"github.com/evanstern/coda/internal/lifecycle"
 )
 
 const codaCoreVersion = "0.1.0-dev"
-
-// Exit code contract. See docs/v2-lifecycle.md. Stable across v2 releases.
-const (
-	ExitSuccess          = 0
-	ExitUserError        = 1
-	ExitDBError          = 2
-	ExitLifecycleBlocked = 3
-)
 
 type codaCoreError struct {
 	code int
@@ -35,11 +28,11 @@ type codaCoreError struct {
 func (e *codaCoreError) Error() string { return e.msg }
 
 func userError(f string, a ...any) error {
-	return &codaCoreError{code: ExitUserError, msg: fmt.Sprintf(f, a...)}
+	return &codaCoreError{code: codaexit.UserError, msg: fmt.Sprintf(f, a...)}
 }
 
 func dbError(err error) error {
-	return &codaCoreError{code: ExitDBError, msg: err.Error()}
+	return &codaCoreError{code: codaexit.DBError, msg: err.Error()}
 }
 
 // parseInterleaved accepts flags anywhere in args (stdlib flag only
