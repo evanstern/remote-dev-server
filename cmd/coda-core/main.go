@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -21,6 +22,14 @@ func main() {
 		err = runWatch(os.Args[2:])
 	case "github":
 		err = runGitHub(os.Args[2:])
+	case "orchestrator":
+		err = runOrchestrator(os.Args[2:])
+	case "feature":
+		err = runFeature(os.Args[2:])
+	case "status":
+		err = runStatus(os.Args[2:])
+	case "version", "--version", "-V":
+		err = runVersion(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -31,6 +40,10 @@ func main() {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		var cce *codaCoreError
+		if errors.As(err, &cce) {
+			os.Exit(cce.code)
+		}
 		os.Exit(1)
 	}
 }
@@ -47,5 +60,18 @@ Commands:
   provider status    Show provider diagnostics
   watch              Monitor OpenCode sessions and notify on attention needed
   github token       Generate a GitHub App installation access token
-  github comment     Post a comment as the GitHub App identity`)
+  github comment     Post a comment as the GitHub App identity
+
+v2 lifecycle (SQLite-backed):
+  orchestrator new     Register an orchestrator
+  orchestrator start   Mark orchestrator running
+  orchestrator stop    Mark orchestrator stopped
+  orchestrator ls      List orchestrators
+  orchestrator rm      Remove an orchestrator
+  feature spawn        Register a feature (state=spawning)
+  feature ls           List features
+  feature attach       Mark feature running
+  feature finish       Mark feature done (fires pre-feature-teardown)
+  status               Combined orchestrator + feature status
+  version              Print version + resolved CODA_HOME / DB`)
 }

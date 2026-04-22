@@ -38,6 +38,9 @@ CLAUDE_CREDENTIALS_PATH="${CLAUDE_CREDENTIALS_PATH:-$HOME/.claude/.credentials.j
 CODA_HOOKS_DIR="${CODA_HOOKS_DIR:-$HOME/.config/coda/hooks}"
 CODA_PLUGINS_DIR="${CODA_PLUGINS_DIR:-$HOME/.config/coda/plugins}"
 
+: "${CODA_HOME:=${XDG_STATE_HOME:-$HOME/.local/state}/coda}"
+export CODA_HOME
+
 # Load modules
 for _coda_mod in helpers hooks core project feature layout provider profile watch mcp github plugin; do
     # shellcheck source=/dev/null
