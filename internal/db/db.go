@@ -1,23 +1,21 @@
 // Package db provides SQLite access for the coda-core v2 lifecycle state
-// store. It embeds the schema and applies it idempotently on open.
+// store. On Open, it applies numbered forward-only migrations from
+// internal/db/migrations to bring the database up to the current schema.
 package db
 
 import (
 	"database/sql"
-	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/evanstern/coda/internal/db/migrations"
 	_ "modernc.org/sqlite"
 )
 
-//go:embed schema.sql
-var schemaSQL string
-
-// SchemaVersion is the schema revision this coda-core binary understands.
-// Bumped in lockstep with breaking changes to schema.sql.
-const SchemaVersion = 1
+// Migration is re-exported from the migrations subpackage so tests and
+// callers of openWithMigrations don't need to import it separately.
+type Migration = migrations.Migration
 
 // DefaultHome returns the CODA_HOME directory, defaulting to
 // $XDG_STATE_HOME/coda (or ~/.local/state/coda).
@@ -46,10 +44,23 @@ func DefaultPath() (string, error) {
 
 // Open opens the database at the given path, creating the parent dir
 // with 0700 if it does not exist. It enables WAL and foreign keys and
-// applies the embedded schema idempotently.
+// applies any pending migrations to bring the DB up to the current
+// schema version.
 //
 // If path is empty, DefaultPath() is used.
 func Open(path string) (*sql.DB, error) {
+	migs, err := migrations.All()
+	if err != nil {
+		return nil, fmt.Errorf("load migrations: %w", err)
+	}
+	return openWithMigrations(path, migs)
+}
+
+// openWithMigrations is the testable seam behind Open: it accepts an
+// explicit migration slice so tests can inject a synthetic migration
+// (e.g., one whose SQL is intentionally invalid) to exercise the
+// transaction rollback behavior of the migration runner.
+func openWithMigrations(path string, migs []Migration) (*sql.DB, error) {
 	if path == "" {
 		p, err := DefaultPath()
 		if err != nil {
@@ -62,35 +73,88 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	// Pragmas are passed via DSN so they're applied per-connection.
 	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)", path)
 	d, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-
-	// Single connection avoids WAL concurrency surprises in a CLI tool.
 	d.SetMaxOpenConns(1)
 
-	// Check schema_version BEFORE applying schema so a newer incoming DB
-	// can be refused cleanly instead of failing inside d.Exec. An empty
-	// or missing table means fresh install; apply schema unconditionally.
-	var dbVer int
-	_ = d.QueryRow(
-		`SELECT COALESCE(MAX(version), 0) FROM schema_version`,
-	).Scan(&dbVer)
-	if dbVer > SchemaVersion {
+	dbVer, err := currentSchemaVersion(d)
+	if err != nil {
+		d.Close()
+		return nil, fmt.Errorf("read schema_version: %w", err)
+	}
+
+	if len(migs) == 0 {
+		d.Close()
+		return nil, fmt.Errorf("no database migrations available")
+	}
+	latest := migs[len(migs)-1].Version
+
+	if dbVer > latest {
 		d.Close()
 		return nil, fmt.Errorf(
 			"coda.db schema version %d is newer than this coda-core (supports up to %d). Upgrade coda-core or use an older DB.",
-			dbVer, SchemaVersion,
+			dbVer, latest,
 		)
 	}
 
-	if _, err := d.Exec(schemaSQL); err != nil {
-		d.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
+	if dbVer == latest {
+		return d, nil
+	}
+
+	for _, m := range migs {
+		if m.Version <= dbVer {
+			continue
+		}
+		if err := applyMigration(d, m); err != nil {
+			d.Close()
+			return nil, fmt.Errorf("apply migration %03d_%s: %w", m.Version, m.Name, err)
+		}
 	}
 
 	return d, nil
+}
+
+// currentSchemaVersion returns MAX(version) from the schema_version
+// table, or 0 if the table does not yet exist (fresh DB). The existence
+// pre-check via sqlite_master avoids relying on sqlite driver error
+// string matching.
+func currentSchemaVersion(d *sql.DB) (int, error) {
+	var name string
+	err := d.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'`,
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	var v int
+	if err := d.QueryRow(
+		`SELECT COALESCE(MAX(version), 0) FROM schema_version`,
+	).Scan(&v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// applyMigration runs one migration inside a transaction. If the
+// migration SQL fails or the commit fails, the transaction is rolled
+// back and no schema_version row is written. The deferred Rollback is
+// a no-op on a committed transaction.
+func applyMigration(d *sql.DB, m Migration) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(m.SQL); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
