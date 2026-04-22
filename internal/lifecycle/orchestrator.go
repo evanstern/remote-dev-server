@@ -106,13 +106,13 @@ func (m *Manager) CreateOrchestrator(ctx context.Context, name, configDir string
 
 // StartOrchestrator records a start transition: state=running, stamps
 // tmux_session/port/pid/started_at. Fires post-orchestrator-start.
-func (m *Manager) StartOrchestrator(ctx context.Context, name string, tmuxSession string, port int, pid int) (*Orchestrator, error) {
+func (m *Manager) StartOrchestrator(ctx context.Context, name string, tmuxSession string, sessionID string, port int, pid int) (*Orchestrator, error) {
 	now := m.now()
 	res, err := m.DB.ExecContext(ctx,
 		`UPDATE orchestrators
-		 SET state=?, tmux_session=?, port=?, pid=?, started_at=?, stale_reason=NULL, updated_at=?
+		 SET state=?, tmux_session=?, session_id=?, port=?, pid=?, started_at=?, stale_reason=NULL, updated_at=?
 		 WHERE name=? AND state IN ('stopped','stale')`,
-		StateRunning, nullStr(tmuxSession), nullInt(int64(port)), nullInt(int64(pid)), now, now, name)
+		StateRunning, nullStr(tmuxSession), nullStr(sessionID), nullInt(int64(port)), nullInt(int64(pid)), now, now, name)
 	if err != nil {
 		return nil, err
 	}

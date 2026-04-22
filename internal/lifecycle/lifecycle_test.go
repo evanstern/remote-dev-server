@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -37,7 +38,7 @@ func TestOrchestratorCRUD(t *testing.T) {
 		t.Fatalf("duplicate create: err=%v, want ErrExists", err)
 	}
 
-	o2, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 12345)
+	o2, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 12345)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -129,5 +130,40 @@ func TestSpawnFeatureMissingOrchestrator(t *testing.T) {
 	})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err=%v, want ErrNotFound", err)
+	}
+}
+
+func TestStartOrchestrator_SetsSessionID(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+
+	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	o, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "ses_abc123", 4096, 1111)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if !o.TmuxSession.Valid || o.TmuxSession.String != "tmux-ash" {
+		t.Fatalf("tmux_session not persisted: %+v", o.TmuxSession)
+	}
+	// Verify session_id persisted via GetOrchestrator (round-trip
+	// through the DB, not just the in-memory return value).
+	refetched, err := m.GetOrchestrator(ctx, "ash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refetched.StaleReason.Valid {
+		t.Fatalf("stale_reason should be NULL after start: %+v", refetched.StaleReason)
+	}
+	// The Orchestrator struct does not currently expose SessionID;
+	// verify via direct SQL query against the test DB.
+	var sid sql.NullString
+	if err := m.DB.QueryRowContext(ctx,
+		`SELECT session_id FROM orchestrators WHERE name='ash'`).Scan(&sid); err != nil {
+		t.Fatal(err)
+	}
+	if !sid.Valid || sid.String != "ses_abc123" {
+		t.Fatalf("session_id = %+v, want ses_abc123", sid)
 	}
 }

@@ -229,13 +229,14 @@ func orchNew(args []string) error {
 func orchStart(args []string) error {
 	fs := flag.NewFlagSet("orchestrator start", flag.ContinueOnError)
 	tmuxSession := fs.String("tmux-session", "", "tmux session name (optional)")
+	sessionID := fs.String("session-id", "", "opencode session id (optional)")
 	port := fs.Int("port", 0, "listener port (optional)")
 	pid := fs.Int("pid", 0, "process id (optional)")
 	if err := parseInterleaved(fs, args); err != nil {
 		return userError("%v", err)
 	}
 	if fs.NArg() != 1 {
-		return userError("usage: coda-core orchestrator start <name> [--tmux-session ...] [--port N] [--pid N]")
+		return userError("usage: coda-core orchestrator start <name> [--tmux-session ...] [--session-id ...] [--port N] [--pid N]")
 	}
 	name := fs.Arg(0)
 
@@ -245,7 +246,7 @@ func orchStart(args []string) error {
 	}
 	defer d.Close()
 
-	o, err := mgr.StartOrchestrator(context.Background(), name, *tmuxSession, *port, *pid)
+	o, err := mgr.StartOrchestrator(context.Background(), name, *tmuxSession, *sessionID, *port, *pid)
 	if err != nil {
 		if errors.Is(err, lifecycle.ErrNotFound) {
 			return userError("%v", err)

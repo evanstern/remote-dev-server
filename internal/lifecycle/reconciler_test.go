@@ -136,7 +136,7 @@ func TestReconcile_TmuxGoneWithUnknownPidKeepsAlive(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 1111); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 1111); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -166,7 +166,7 @@ func TestReconcile_PidDeadButTmuxAliveKeepsAlive(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 2222); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 2222); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -192,7 +192,7 @@ func TestReconcile_BothDeadMarksStale(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 1111); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 1111); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -228,7 +228,7 @@ func TestReconcile_TmuxOnlyDead(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 0); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 0); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -256,7 +256,7 @@ func TestReconcile_PidOnlyDead(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "", 4096, 2222); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "", "", 4096, 2222); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -284,7 +284,7 @@ func TestReconcile_NoSignalsSkipped(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "", 0, 0); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "", "", 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -310,7 +310,7 @@ func TestReconcile_ProbeErrorSkipsRow(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 3333); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 3333); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -336,7 +336,7 @@ func TestReconcile_BothAliveNoOp(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 3333); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 3333); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -366,7 +366,7 @@ func TestReconcile_RespectsFreshnessWindow(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 4444); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 4444); err != nil {
 		t.Fatal(err)
 	}
 
@@ -395,7 +395,7 @@ func TestReconcile_StaleRowIsIdempotent(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 5555); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 5555); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -425,7 +425,7 @@ func TestReconcile_ConcurrentStartWinsOverReconcile(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 9999); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 9999); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -518,7 +518,7 @@ func TestReconcile_FiresOrchestratorStaleHook(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 6666); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 6666); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -608,10 +608,10 @@ func TestReconcile_HookFailureDoesNotAbortLoop(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 1111); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 1111); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "beth", "tmux-beth", 4097, 2222); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "beth", "tmux-beth", "", 4097, 2222); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -644,7 +644,7 @@ func TestStartOrchestrator_FromStale(t *testing.T) {
 	if _, err := m.CreateOrchestrator(ctx, "ash", "/tmp/ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", 4096, 7777); err != nil {
+	if _, err := m.StartOrchestrator(ctx, "ash", "tmux-ash", "", 4096, 7777); err != nil {
 		t.Fatal(err)
 	}
 	backdateOrchestrator(t, m, "ash", 60)
@@ -662,7 +662,7 @@ func TestStartOrchestrator_FromStale(t *testing.T) {
 		t.Fatalf("precondition: state=%s, want stale", o.State)
 	}
 
-	o2, err := m.StartOrchestrator(ctx, "ash", "tmux-ash-2", 4097, 8888)
+	o2, err := m.StartOrchestrator(ctx, "ash", "tmux-ash-2", "", 4097, 8888)
 	if err != nil {
 		t.Fatalf("start from stale: %v", err)
 	}
