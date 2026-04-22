@@ -22,6 +22,15 @@ func (s *spyDispatcher) Fire(ctx context.Context, e hooks.Event, _ map[string]an
 	return nil
 }
 
+func (s *spyDispatcher) sawEvent(want hooks.Event) bool {
+	for _, e := range s.events {
+		if e == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPreFeatureTeardownFiresBeforeStateUpdate(t *testing.T) {
 	home := t.TempDir()
 	d, err := db.Open(filepath.Join(home, "coda.db"))

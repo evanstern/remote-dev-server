@@ -218,6 +218,64 @@ SELECT syntax error;`,
 	}
 }
 
+func TestApplyMigration_ForeignKeyCheckRollsBack(t *testing.T) {
+	base, err := migrations.All()
+	if err != nil {
+		t.Fatalf("migrations.All: %v", err)
+	}
+	latest := base[len(base)-1].Version
+
+	bad := make([]Migration, 0, len(base)+1)
+	bad = append(bad, base...)
+	bad = append(bad, Migration{
+		Version: latest + 1,
+		Name:    "fk-violation",
+		SQL: `
+CREATE TABLE fk_parent (id INTEGER PRIMARY KEY);
+CREATE TABLE fk_child (
+  id         INTEGER PRIMARY KEY,
+  parent_id  INTEGER NOT NULL REFERENCES fk_parent(id)
+);
+INSERT INTO fk_parent (id) VALUES (1);
+INSERT INTO fk_child (id, parent_id) VALUES (1, 1);
+DELETE FROM fk_parent WHERE id = 1;
+INSERT INTO schema_version (version, applied_at) VALUES (` +
+			strconv.Itoa(latest+1) + `, unixepoch());
+`,
+	})
+
+	path := filepath.Join(t.TempDir(), "coda.db")
+	_, err = openWithMigrations(path, bad)
+	if err == nil {
+		t.Fatal("expected FK-violation error, got nil")
+	}
+	if !contains(err.Error(), "violated FK") {
+		t.Fatalf("expected 'violated FK' error, got: %v", err)
+	}
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen after failed migration: %v", err)
+	}
+	defer d.Close()
+
+	var v int
+	if err := d.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&v); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if v != latest {
+		t.Fatalf("schema_version = %d, want %d (FK-violating migration must not bump)", v, latest)
+	}
+
+	var name string
+	err = d.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='fk_child'`,
+	).Scan(&name)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("fk_child table should not exist after rollback; got err=%v name=%q", err, name)
+	}
+}
+
 func TestCheckConstraintRejectsBogusOrchestratorState(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "coda.db"))
 	if err != nil {

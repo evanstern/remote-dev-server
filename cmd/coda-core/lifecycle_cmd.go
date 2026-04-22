@@ -9,14 +9,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/evanstern/coda/internal/codaexit"
 	"github.com/evanstern/coda/internal/db"
 	"github.com/evanstern/coda/internal/hooks"
 	"github.com/evanstern/coda/internal/lifecycle"
 )
+
+const defaultLazyReconcileIntervalSecs = 10
 
 const codaCoreVersion = "0.1.0-dev"
 
@@ -323,14 +327,38 @@ func printReconcileResults(w io.Writer, results []lifecycle.ReconcileResult) {
 }
 
 // maybeLazyReconcile runs a best-effort reconcile pass unless the user
-// disabled it with CODA_NO_AUTO_RECONCILE=1. Errors are silently
-// ignored so read-only commands like ls/status stay usable when the
-// prober can't run.
+// disabled it with CODA_NO_AUTO_RECONCILE=1. A reconciler_state row
+// serializes runs across invocations: a pass is skipped if the last
+// run completed less than CODA_RECONCILE_MIN_INTERVAL_SECS ago (default
+// 10s). Explicit `orchestrator reconcile` bypasses this rate-limit.
+// Errors are silently ignored so read-only commands like ls/status
+// stay usable when the prober can't run.
 func maybeLazyReconcile(ctx context.Context, mgr *lifecycle.Manager) {
 	if os.Getenv("CODA_NO_AUTO_RECONCILE") == "1" {
 		return
 	}
-	_, _ = mgr.Reconcile(ctx, "")
+
+	intervalSecs := int64(defaultLazyReconcileIntervalSecs)
+	if v := os.Getenv("CODA_RECONCILE_MIN_INTERVAL_SECS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			intervalSecs = int64(n)
+		}
+	}
+
+	var lastRun int64
+	_ = mgr.DB.QueryRowContext(ctx,
+		`SELECT last_run_at FROM reconciler_state WHERE id=1`).Scan(&lastRun)
+
+	now := time.Now().Unix()
+	if now-lastRun < intervalSecs {
+		return
+	}
+
+	if _, err := mgr.Reconcile(ctx, ""); err != nil {
+		return
+	}
+	_, _ = mgr.DB.ExecContext(ctx,
+		`UPDATE reconciler_state SET last_run_at=? WHERE id=1`, now)
 }
 
 func orchRm(args []string) error {

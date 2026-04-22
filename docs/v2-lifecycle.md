@@ -76,8 +76,18 @@ Events implemented by `coda-core`:
 - `post-orchestrator-stale` — fires when `Reconcile` transitions an
   orchestrator to `stale` (see "Reconciliation" below).
 - `post-feature-spawn`
+- `post-feature-stale` — fires when `Reconcile` transitions a feature
+  to `stale` (reconciler verdict from a dead liveness probe).
 - `pre-feature-teardown` — fires **before** the row is marked `done`, so
   hooks observing the DB see state=`running`.
+
+`post-orchestrator-stale` and `post-feature-stale` are always non-fatal,
+even under the #150 fatal-hook semantics: the state transition has
+already committed by the time the hook fires, so there is nothing left
+for a fatal hook to block. Fatal semantics apply only to `pre-*` events.
+Hook failures during reconciliation are logged and the reconcile loop
+continues with the remaining rows — reconciliation correctness does not
+depend on hook delivery.
 
 ## Hook dispatch ordering
 
@@ -113,8 +123,13 @@ State vocabulary:
 - `orchestrators.state = 'stale'` — row was `starting|running|stopping`
   but its `tmux_session` or `pid` no longer exists. Set by the
   reconciler; cleared when the operator calls `orchestrator start`.
-- `features.state = 'failed'` — row was `spawning|running|reporting`
-  but its `tmux_session` no longer exists. `failed` is terminal.
+- `features.state = 'stale'` — row was `spawning|running|reporting`
+  but its `tmux_session` no longer exists. `stale` is terminal and is
+  the reconciler's verdict from a dead liveness probe.
+- `features.state = 'failed'` — reserved for features that errored on
+  their own terms (e.g. a spawn-time failure). `failed` is terminal and
+  is distinct from `stale`: it is written by the feature's own code
+  path, not by the reconciler.
 
 Each transition also populates a `stale_reason` column (a short string
 like `tmux session "coda-orch--alice" gone` or `pid 12345 not alive`).
@@ -133,6 +148,14 @@ Lazy: `coda-core orchestrator ls` and `coda-core status` run a
 best-effort reconcile pass before rendering. Set
 `CODA_NO_AUTO_RECONCILE=1` to disable.
 
+The lazy pass is rate-limited by the `reconciler_state.last_run_at`
+column: if a pass completed less than `CODA_RECONCILE_MIN_INTERVAL_SECS`
+(default 10) seconds ago, the next invocation skips. This protects
+agents that poll `ls` / `status` in tight loops from hammering the
+prober (50 orchs × one tmux fork + one /proc read per row per
+invocation adds up quickly). The explicit `orchestrator reconcile`
+command ignores this rate-limit and always runs.
+
 ### Freshness window
 
 Rows updated within the last 30 seconds are skipped to avoid racing
@@ -147,8 +170,46 @@ recorded before the child has fully forked.
   (#149) concern and is deliberately out of scope here.
 
 The reconciler is observational. It updates DB rows and fires the
-`post-orchestrator-stale` hook; it never kills tmux sessions or pids.
-Filesystem cleanup remains a v1 `coda feature done/finish` responsibility.
+`post-orchestrator-stale` / `post-feature-stale` hooks; it never kills
+tmux sessions or pids. Filesystem cleanup remains a v1 `coda feature
+done/finish` responsibility.
+
+### Prober interface (for custom probes)
+
+Signal-combining policy lives behind the `Prober` interface:
+
+```go
+type Prober interface {
+    OrchestratorAlive(o *Orchestrator) (alive bool, reason string, err error)
+    FeatureAlive(f *Feature) (alive bool, reason string, err error)
+}
+```
+
+Contract that implementations MUST honor:
+
+- Both signals known, either alive → return `(true, "", nil)`.
+- All known signals dead → return `(false, <reason>, nil)`.
+- No known signals (empty tmux session name AND zero pid) → return
+  `(true, "no liveness signal", nil)` — never mark stale without
+  evidence.
+- Any probe failure (missing tmux binary, IO error, etc.) → return a
+  non-nil error. The reconciler skips that row for this pass instead
+  of treating probe failure as a dead signal.
+
+EPERM from `kill(pid, 0)` means the process exists but the caller
+lacks permission to signal it; treat it as alive. The default prober
+handles this for you.
+
+Custom probers can be installed via `Manager.SetProber`. Passing nil
+resets to the default tmux+pid prober.
+
+### Race safety
+
+Stale transitions use an optimistic UPDATE: the WHERE clause pins the
+row's state and updated_at to the values observed at SELECT time, and a
+zero RowsAffected is treated as "another writer won the race, skip
+this row silently." A concurrent `StartOrchestrator` / `StopOrchestrator`
+cannot have its transition clobbered by an in-flight reconcile pass.
 
 ### Restart from stale
 

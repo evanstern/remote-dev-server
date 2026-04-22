@@ -27,6 +27,7 @@ const (
 	EventPostOrchestratorStop  Event = "post-orchestrator-stop"
 	EventPostOrchestratorStale Event = "post-orchestrator-stale"
 	EventPostFeatureSpawn      Event = "post-feature-spawn"
+	EventPostFeatureStale      Event = "post-feature-stale"
 	EventPreFeatureTeardown    Event = "pre-feature-teardown"
 )
 

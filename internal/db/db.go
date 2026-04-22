@@ -142,19 +142,62 @@ func currentSchemaVersion(d *sql.DB) (int, error) {
 	return v, nil
 }
 
-// applyMigration runs one migration inside a transaction. If the
-// migration SQL fails or the commit fails, the transaction is rolled
-// back and no schema_version row is written. The deferred Rollback is
-// a no-op on a committed transaction.
+// applyMigration runs one migration inside a transaction following the
+// canonical SQLite "Making Other Kinds Of Table Schema Changes" pattern
+// (https://sqlite.org/lang_altertable.html §7):
+//
+//  1. PRAGMA foreign_keys=OFF outside any transaction
+//  2. BEGIN
+//  3. apply the migration SQL
+//  4. PRAGMA foreign_key_check inside the transaction, before commit
+//  5. if the check reports any rows, return error -> deferred rollback
+//     fires and the schema mutation is discarded
+//  6. COMMIT
+//  7. PRAGMA foreign_keys=ON outside any transaction
+//
+// Running the FK check inside the transaction is load-bearing: a check
+// after COMMIT would leave an FK-violating schema committed on disk.
 func applyMigration(d *sql.DB, m Migration) error {
+	if _, err := d.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		return fmt.Errorf("disable foreign_keys: %w", err)
+	}
+	defer func() { _, _ = d.Exec(`PRAGMA foreign_keys=ON`) }()
+
 	tx, err := d.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
 
 	if _, err := tx.Exec(m.SQL); err != nil {
 		return err
 	}
-	return tx.Commit()
+
+	rows, err := tx.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return fmt.Errorf("foreign_key_check: %w", err)
+	}
+	if rows.Next() {
+		var table, rowid, parent, fkid any
+		_ = rows.Scan(&table, &rowid, &parent, &fkid)
+		rows.Close()
+		return fmt.Errorf(
+			"migration %03d_%s violated FK (table=%v parent=%v)",
+			m.Version, m.Name, table, parent,
+		)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
