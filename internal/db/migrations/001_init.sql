@@ -48,4 +48,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
   applied_at INTEGER NOT NULL
 );
 
-INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (1, unixepoch());
+INSERT INTO schema_version (version, applied_at) VALUES (1, unixepoch());
