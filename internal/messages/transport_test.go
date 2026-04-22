@@ -117,7 +117,7 @@ func TestHTTPTransport_PathEscapesSessionID(t *testing.T) {
 	if err := tr.Deliver(context.Background(), port, "abc/def", "hi"); err != nil {
 		t.Fatal(err)
 	}
-	want := "/session/abc%2Fdef/message"
+	want := "/session/abc%2Fdef/prompt_async"
 	if gotPath != want {
 		t.Fatalf("escaped path = %q, want %q", gotPath, want)
 	}
@@ -158,8 +158,8 @@ func TestHTTPTransport_SendsCorrectBody(t *testing.T) {
 	if parsed.Parts[0].Text != "hello" {
 		t.Fatalf("parts[0].text = %q, want %q", parsed.Parts[0].Text, "hello")
 	}
-	if gotPath != "/session/ses1/message" {
-		t.Fatalf("path = %q, want /session/ses1/message", gotPath)
+	if gotPath != "/session/ses1/prompt_async" {
+		t.Fatalf("path = %q, want /session/ses1/prompt_async", gotPath)
 	}
 }
 
