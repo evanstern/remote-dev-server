@@ -21,13 +21,17 @@ func NewHTTPTransport() *HTTPTransport {
 	return &HTTPTransport{Client: &http.Client{Timeout: 3 * time.Second}}
 }
 
-// Deliver POSTs a text message to http://127.0.0.1:<port>/session/<id>/message
-// using the opencode session API shape:
+// Deliver POSTs a text message to
+// http://127.0.0.1:<port>/session/<id>/prompt_async using the opencode
+// session API shape:
 //
 //	{"parts":[{"type":"text","text":"<text>"}]}
 //
-// Returns error on non-2xx, missing coordinates, invalid port, or
-// transport failure.
+// The prompt_async endpoint returns 204 No Content immediately — true
+// fire-and-forget. The sibling /message endpoint holds the connection
+// open until the agent replies, which blows past the 3s client timeout
+// on any real message. Returns error on non-2xx, missing coordinates,
+// invalid port, or transport failure.
 //
 // Delivery is loopback-only by design: the v2 message bus is a
 // single-host system and only talks to orchestrator sessions on
@@ -42,8 +46,8 @@ func (h *HTTPTransport) Deliver(ctx context.Context, port int, sessionID, text s
 	u := &url.URL{
 		Scheme:  "http",
 		Host:    fmt.Sprintf("127.0.0.1:%d", port),
-		Path:    "/session/" + sessionID + "/message",
-		RawPath: "/session/" + url.PathEscape(sessionID) + "/message",
+		Path:    "/session/" + sessionID + "/prompt_async",
+		RawPath: "/session/" + url.PathEscape(sessionID) + "/prompt_async",
 	}
 	payload, err := json.Marshal(map[string]any{
 		"parts": []map[string]string{{"type": "text", "text": text}},
