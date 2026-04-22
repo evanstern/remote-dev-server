@@ -22,8 +22,12 @@ func NewHTTPTransport() *HTTPTransport {
 }
 
 // Deliver POSTs a text message to http://127.0.0.1:<port>/session/<id>/message
-// with body {"text":"<text>"}. Returns error on non-2xx, missing
-// coordinates, invalid port, or transport failure.
+// using the opencode session API shape:
+//
+//	{"parts":[{"type":"text","text":"<text>"}]}
+//
+// Returns error on non-2xx, missing coordinates, invalid port, or
+// transport failure.
 //
 // Delivery is loopback-only by design: the v2 message bus is a
 // single-host system and only talks to orchestrator sessions on
@@ -41,7 +45,9 @@ func (h *HTTPTransport) Deliver(ctx context.Context, port int, sessionID, text s
 		Path:    "/session/" + sessionID + "/message",
 		RawPath: "/session/" + url.PathEscape(sessionID) + "/message",
 	}
-	payload, err := json.Marshal(map[string]string{"text": text})
+	payload, err := json.Marshal(map[string]any{
+		"parts": []map[string]string{{"type": "text", "text": text}},
+	})
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
