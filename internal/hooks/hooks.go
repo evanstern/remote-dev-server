@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -112,7 +113,17 @@ func (d *Dispatcher) runOne(ctx context.Context, script string, payload []byte) 
 	cmd.Stdin = bytes.NewReader(payload)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	cmd.Env = append(os.Environ(), "CODA_HOME="+d.HomeDir)
+	// Strip any inherited CODA_HOME so the child sees exactly the one
+	// the dispatcher resolved. Duplicates can cause tooling that reads
+	// environ directly to pick the wrong value.
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "CODA_HOME=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = append(env, "CODA_HOME="+d.HomeDir)
 
 	err := cmd.Run()
 	if err == nil {

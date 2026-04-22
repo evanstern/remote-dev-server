@@ -34,7 +34,9 @@ func TestFire_NoDirIsNoOp(t *testing.T) {
 		t.Fatalf("fire: %v", err)
 	}
 	var n int
-	d.QueryRow("SELECT count(*) FROM hook_events").Scan(&n)
+	if err := d.QueryRow("SELECT count(*) FROM hook_events").Scan(&n); err != nil {
+		t.Fatalf("count hook events: %v", err)
+	}
 	if n != 0 {
 		t.Fatalf("expected 0 events, got %d", n)
 	}
