@@ -110,7 +110,7 @@ fatal-hook block surfaces to the caller as coda-core exit code 3
 
 Callers MUST treat any non-zero exit as an error. Exit code 3 signals
 "user action required, do not retry" and is stable across v2 releases
-even though #148 does not yet emit it.
+even though `coda-core` does not yet emit it (it ships with #150).
 
 Go callers in this repository can import the constants from
 `github.com/evanstern/coda/internal/codaexit`. External tooling should
