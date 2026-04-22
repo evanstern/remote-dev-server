@@ -27,6 +27,29 @@ func TestAll_ParsesAndOrders(t *testing.T) {
 	}
 }
 
+func TestAll_IncludesMessagesMigration(t *testing.T) {
+	ms, err := All()
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	var found *Migration
+	for i := range ms {
+		if ms[i].Version == 3 {
+			found = &ms[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("migration 003 not present in embed (got %d migrations)", len(ms))
+	}
+	if found.Name != "messages" {
+		t.Fatalf("migration 003 name = %q, want %q", found.Name, "messages")
+	}
+	if !strings.Contains(found.SQL, "CREATE TABLE IF NOT EXISTS messages") {
+		t.Fatalf("migration 003 SQL missing messages table")
+	}
+}
+
 func TestLatest_MatchesLastMigration(t *testing.T) {
 	ms, err := All()
 	if err != nil {

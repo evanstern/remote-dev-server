@@ -28,6 +28,14 @@ func main() {
 		err = runFeature(os.Args[2:])
 	case "status":
 		err = runStatus(os.Args[2:])
+	case "send":
+		err = runSend(os.Args[2:])
+	case "recv":
+		err = runRecv(os.Args[2:])
+	case "ack":
+		err = runAck(os.Args[2:])
+	case "drain":
+		err = runDrain(os.Args[2:])
 	case "version", "--version", "-V":
 		err = runVersion(os.Args[2:])
 	case "help", "--help", "-h":
@@ -74,5 +82,11 @@ v2 lifecycle (SQLite-backed):
   feature attach       Mark feature running
   feature finish       Mark feature done (fires pre-feature-teardown)
   status               Combined orchestrator + feature status
-  version              Print version + resolved CODA_HOME / DB`)
+  version              Print version + resolved CODA_HOME / DB
+
+Messages:
+  send     Send a typed message (writes row, attempts delivery)
+  recv     List messages for a recipient
+  ack      Mark a message as acted-upon
+  drain    Flush undelivered messages for a recipient`)
 }
