@@ -140,12 +140,23 @@ func TestHTTPTransport_SendsCorrectBody(t *testing.T) {
 	if err := tr.Deliver(context.Background(), port, "ses1", "hello"); err != nil {
 		t.Fatal(err)
 	}
-	var parsed map[string]string
+	var parsed struct {
+		Parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"parts"`
+	}
 	if err := json.Unmarshal(gotBody, &parsed); err != nil {
 		t.Fatalf("body not JSON: %v", err)
 	}
-	if parsed["text"] != "hello" {
-		t.Fatalf("body text = %q, want %q", parsed["text"], "hello")
+	if len(parsed.Parts) != 1 {
+		t.Fatalf("parts len = %d, want 1", len(parsed.Parts))
+	}
+	if parsed.Parts[0].Type != "text" {
+		t.Fatalf("parts[0].type = %q, want %q", parsed.Parts[0].Type, "text")
+	}
+	if parsed.Parts[0].Text != "hello" {
+		t.Fatalf("parts[0].text = %q, want %q", parsed.Parts[0].Text, "hello")
 	}
 	if gotPath != "/session/ses1/message" {
 		t.Fatalf("path = %q, want /session/ses1/message", gotPath)
