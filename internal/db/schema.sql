@@ -2,8 +2,10 @@ CREATE TABLE IF NOT EXISTS orchestrators (
   id            INTEGER PRIMARY KEY,
   name          TEXT NOT NULL UNIQUE,
   config_dir    TEXT NOT NULL,
-  state         TEXT NOT NULL,
+  state         TEXT NOT NULL
+                CHECK (state IN ('stopped','starting','running','stopping')),
   tmux_session  TEXT,
+  session_id    TEXT,
   port          INTEGER,
   pid           INTEGER,
   started_at    INTEGER,
@@ -19,7 +21,8 @@ CREATE TABLE IF NOT EXISTS features (
   branch          TEXT NOT NULL,
   worktree_dir    TEXT NOT NULL,
   tmux_session    TEXT,
-  state           TEXT NOT NULL,
+  state           TEXT NOT NULL
+                  CHECK (state IN ('spawning','running','reporting','done','failed')),
   brief_path      TEXT,
   pr_url          TEXT,
   created_at      INTEGER NOT NULL,
@@ -37,3 +40,12 @@ CREATE TABLE IF NOT EXISTS hook_events (
   stderr     TEXT,
   fired_at   INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_hook_events_fired_at ON hook_events(fired_at);
+
+CREATE TABLE IF NOT EXISTS schema_version (
+  version    INTEGER NOT NULL PRIMARY KEY,
+  applied_at INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (1, unixepoch());

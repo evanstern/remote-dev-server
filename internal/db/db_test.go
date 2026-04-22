@@ -71,3 +71,92 @@ func TestDefaultHome_XDGFallback(t *testing.T) {
 		t.Fatalf("DefaultHome = %q, want /tmp/xdg-state/coda", h)
 	}
 }
+
+func TestSchemaVersionIsRecordedOnFreshDB(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "coda.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	var v int
+	if err := d.QueryRow(`SELECT version FROM schema_version`).Scan(&v); err != nil {
+		t.Fatalf("read schema_version: %v", err)
+	}
+	if v != SchemaVersion {
+		t.Fatalf("schema_version = %d, want %d", v, SchemaVersion)
+	}
+}
+
+func TestOpenRejectsNewerSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "coda.db")
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(
+		`INSERT INTO schema_version (version, applied_at) VALUES (?, unixepoch())`,
+		SchemaVersion+1,
+	); err != nil {
+		t.Fatalf("seed future version: %v", err)
+	}
+	d.Close()
+
+	_, err = Open(path)
+	if err == nil {
+		t.Fatal("expected error opening DB with newer schema, got nil")
+	}
+	if got := err.Error(); !contains(got, "newer than this coda-core") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCheckConstraintRejectsBogusOrchestratorState(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "coda.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	_, err = d.Exec(
+		`INSERT INTO orchestrators (name, config_dir, state, created_at, updated_at)
+		 VALUES ('x', '/tmp/x', 'bogus', 0, 0)`,
+	)
+	if err == nil {
+		t.Fatal("expected CHECK constraint to reject 'bogus' state")
+	}
+	if !contains(err.Error(), "CHECK constraint") && !contains(err.Error(), "constraint failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCheckConstraintRejectsBogusFeatureState(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "coda.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	if _, err := d.Exec(
+		`INSERT INTO orchestrators (name, config_dir, state, created_at, updated_at)
+		 VALUES ('o', '/tmp/o', 'stopped', 0, 0)`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.Exec(
+		`INSERT INTO features (name, orchestrator_id, project, branch, worktree_dir, state, created_at, updated_at)
+		 VALUES ('f', 1, 'p', 'b', '/tmp/w', 'bogus', 0, 0)`,
+	)
+	if err == nil {
+		t.Fatal("expected CHECK constraint to reject 'bogus' state on features")
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

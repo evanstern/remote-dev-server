@@ -15,6 +15,10 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+// SchemaVersion is the schema revision this coda-core binary understands.
+// Bumped in lockstep with breaking changes to schema.sql.
+const SchemaVersion = 1
+
 // DefaultHome returns the CODA_HOME directory, defaulting to
 // $XDG_STATE_HOME/coda (or ~/.local/state/coda).
 func DefaultHome() (string, error) {
@@ -72,5 +76,19 @@ func Open(path string) (*sql.DB, error) {
 		d.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+
+	var dbVer int
+	if err := d.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`).Scan(&dbVer); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("read schema_version: %w", err)
+	}
+	if dbVer > SchemaVersion {
+		d.Close()
+		return nil, fmt.Errorf(
+			"coda.db schema version %d is newer than this coda-core (supports up to %d). Upgrade coda-core or use an older DB.",
+			dbVer, SchemaVersion,
+		)
+	}
+
 	return d, nil
 }

@@ -34,6 +34,22 @@ coda-core binary not found on PATH.
 Build with 'make coda-core' and install, or rerun ./install.sh.
 ```
 
+## v1/v2 feature routing (transition state)
+
+In #148, `coda feature start/done/finish/ls` stay on the v1 bash path.
+`coda feature spawn/attach` route to v2 `coda-core`. These do not share
+state:
+
+- A feature created via `coda feature start` is a worktree + tmux session
+  with **no row** in `coda.db`. It will NOT appear in `coda status` or
+  `coda-core feature ls`.
+- A feature created via `coda feature spawn` is a row in `coda.db` with
+  **no worktree or tmux session** — v2 is state-only in #148.
+
+`coda status` queries the DB only and therefore shows v2 features only.
+This split is resolved structurally in #151 (migration). Until then,
+users should not mix v1 and v2 feature commands on the same feature.
+
 ## State store
 
 Three tables live in `$CODA_HOME/coda.db`:
@@ -60,6 +76,41 @@ Events implemented by `coda-core`:
 - `post-feature-spawn`
 - `pre-feature-teardown` — fires **before** the row is marked `done`, so
   hooks observing the DB see state=`running`.
+
+## Hook dispatch ordering
+
+When multiple hooks subscribe to the same event, they fire in this order:
+
+1. **Plugin-declared hooks first** (from `plugin.toml` manifests, via the
+   plugin registry — this layer ships with #150).
+2. **Filesystem hooks second** (scripts at `$CODA_HOME/hooks/<event>/*.sh`,
+   discovered in lexical order by filename).
+3. **Fatal wins**: if any hook declared `fatal = true` exits non-zero,
+   the lifecycle transition is blocked regardless of subsequent hooks.
+   Hooks not marked fatal are non-fatal — their failures are logged to
+   `hook_events` and ignored for transition purposes.
+
+In #148, only filesystem hooks exist and all are non-fatal. The
+plugin-first rule takes effect when #150 ships. This ordering is the
+binding contract for plugin authors.
+
+Exit codes from hooks are recorded in `hook_events.exit_code`. A
+fatal-hook block surfaces to the caller as coda-core exit code 3
+(reserved; see Exit codes below).
+
+## Exit codes (coda-core)
+
+| Code | Name                  | Meaning                                    |
+|------|-----------------------|--------------------------------------------|
+| 0    | success               | Operation completed.                       |
+| 1    | user error            | Bad args, not found, duplicate, etc.       |
+| 2    | DB error              | Schema or SQLite failure.                  |
+| 3    | lifecycle blocked     | Reserved. Returned when a `fatal=true`     |
+|      |                       | hook blocks a transition (#150).           |
+
+Callers MUST treat any non-zero exit as an error. Exit code 3 signals
+"user action required, do not retry" and is stable across v2 releases
+even though #148 does not yet emit it.
 
 ## Build
 

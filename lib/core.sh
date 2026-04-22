@@ -87,7 +87,8 @@ _coda_v2_core() {
         echo "Build with 'make coda-core' and install, or rerun ./install.sh." >&2
         return 1
     fi
-    coda-core "$@"
+    CODA_HOME="${CODA_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/coda}" \
+        coda-core "$@"
 }
 
 _coda_attach() {

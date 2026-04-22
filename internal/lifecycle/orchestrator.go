@@ -15,10 +15,14 @@ import (
 )
 
 const (
-	StateStopped  = "stopped"
-	StateRunning  = "running"
-	StateSpawning = "spawning"
-	StateDone     = "done"
+	StateStopped   = "stopped"
+	StateStarting  = "starting"
+	StateRunning   = "running"
+	StateStopping  = "stopping"
+	StateSpawning  = "spawning"
+	StateReporting = "reporting"
+	StateDone      = "done"
+	StateFailed    = "failed"
 )
 
 var (
