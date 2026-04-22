@@ -86,10 +86,11 @@ func openWithMigrations(path string, migs []Migration) (*sql.DB, error) {
 		return nil, fmt.Errorf("read schema_version: %w", err)
 	}
 
-	latest := 0
-	if len(migs) > 0 {
-		latest = migs[len(migs)-1].Version
+	if len(migs) == 0 {
+		d.Close()
+		return nil, fmt.Errorf("no database migrations available")
 	}
+	latest := migs[len(migs)-1].Version
 
 	if dbVer > latest {
 		d.Close()
@@ -142,15 +143,17 @@ func currentSchemaVersion(d *sql.DB) (int, error) {
 }
 
 // applyMigration runs one migration inside a transaction. If the
-// migration SQL fails, the transaction is rolled back and no
-// schema_version row is written.
+// migration SQL fails or the commit fails, the transaction is rolled
+// back and no schema_version row is written. The deferred Rollback is
+// a no-op on a committed transaction.
 func applyMigration(d *sql.DB, m Migration) error {
 	tx, err := d.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
+
 	if _, err := tx.Exec(m.SQL); err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()

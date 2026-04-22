@@ -1,6 +1,8 @@
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -210,6 +212,9 @@ SELECT syntax error;`,
 	).Scan(&name)
 	if err == nil {
 		t.Fatal("rollback_probe table exists; migration transaction did not roll back")
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows for missing rollback_probe row, got: %v", err)
 	}
 }
 

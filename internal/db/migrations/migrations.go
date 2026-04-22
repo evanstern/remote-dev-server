@@ -45,13 +45,16 @@ var filenameRE = regexp.MustCompile(`^(\d{3})_([a-z0-9-]+)\.sql$`)
 // ascending. It errors if filenames are malformed, if there are
 // duplicate versions, or if the numbering has gaps.
 //
-// The result is cached: the first successful call loads and validates
-// the embedded FS once; subsequent calls return the same slice.
+// The embedded FS is loaded once; subsequent calls return a defensive
+// copy so callers cannot mutate the cached slice.
 func All() ([]Migration, error) {
 	loadOnce.Do(func() {
 		loaded, loadErr = load(embeddedFS)
 	})
-	return loaded, loadErr
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	return append([]Migration(nil), loaded...), nil
 }
 
 // Latest returns the highest Version across All(). It returns 0 and
